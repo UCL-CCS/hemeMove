@@ -6,6 +6,8 @@ import pytest
 
 import filecmp
 import os.path
+import shutil
+from xml.etree import ElementTree
 
 import numpy as np
 from numpy.linalg import norm
@@ -14,11 +16,24 @@ from HlbGmyTool.Model import OutputGeneration
 from HlbGmyTool.Model.Profile import Profile
 from HlbGmyTool.Model.Vector import Vector
 from HlbGmyTool.Model.Iolets import Iolet
+from hlb.converters.Oct2Gmy import oct2gmy
 from hlb.parsers.geometry.simple import ConfigLoader
+from hlb.parsers.geometry.self_consistency import CheckingLoader
+from hlb.parsers.geometry.simple import ConfigLoader
+from hlb.parsers.geometry import generic
+from hlb.parsers.octree import SectionTree
 from hlb.utils.xml_compare import XmlChecker
 import fixtures
 
 dataDir = os.path.join(os.path.split(__file__)[0], "data")
+
+
+def vec2np(v):
+    ans = np.empty(3, dtype=float)
+    ans[0] = v.x
+    ans[1] = v.y
+    ans[2] = v.z
+    return ans
 
 
 class TestPolyDataGenerator:
@@ -37,31 +52,82 @@ class TestPolyDataGenerator:
         p.OutputGeometryFile = outGmyFileName
         p.OutputXmlFile = outXmlFileName
 
-        generator = OutputGeneration.PolyDataGenerator(p)
+        generator = OutputGeneration.GmyPolyDataGenerator(p)
         generator.Execute()
 
-        assert filecmp.cmp(outGmyFileName, os.path.join(dataDir, "test.gmy"))
+        ldr = CheckingLoader(outGmyFileName)
+        ldr.Load()
+
+        ref_ldr = ConfigLoader(os.path.join(dataDir, "test.gmy"))
+        ref_ldr.Load()
+        ref_dom = ref_ldr.Domain
+
+        test_ldr = ConfigLoader(outGmyFileName)
+        test_ldr.Load()
+        test_dom = test_ldr.Domain
+
+        # Per-block data length must be identical
+        assert np.all(
+            ref_ldr.BlockUncompressedDataLength == test_ldr.BlockUncompressedDataLength
+        )
+        # Same for fluid site counts
+        assert np.all(ref_dom.BlockFluidSiteCounts == test_dom.BlockFluidSiteCounts)
+        nblocks = len(ref_dom.BlockFluidSiteCounts)
+
+        for i_b in range(nblocks):
+            # Blocks should be the same
+            ref_blk = ref_dom.Blocks[i_b]
+            test_blk = test_dom.Blocks[i_b]
+            assert type(ref_blk) == type(ref_blk)
+            if isinstance(ref_blk, generic.AllSolidBlock):
+                continue
+            for i_s in range(ref_dom.BlockSize**3):
+                rs = ref_blk.Sites[i_s]
+                ts = test_blk.Sites[i_s]
+                # Sites must match
+                assert rs.Type == ts.Type
+                if rs.IntersectionType is None:
+                    assert ts.IntersectionType is None
+                else:
+                    assert np.all(rs.IntersectionType == ts.IntersectionType)
+
+                if rs.IntersectionDistance is None:
+                    assert ts.IntersectionDistance is None
+                else:
+                    assert np.allclose(
+                        rs.IntersectionDistance,
+                        ts.IntersectionDistance,
+                        rtol=0,
+                        atol=5e-5,
+                    )
+
+                assert np.all(rs.IOletIndex == ts.IOletIndex)
+                assert rs.WallNormalAvailable == ts.WallNormalAvailable
+                if rs.WallNormalAvailable:
+                    assert np.allclose(rs.WallNormal, ts.WallNormal, atol=1e-6)
+
+        # XML output matches also
         xmlChecker = XmlChecker.from_path(os.path.join(dataDir, "test.xml"))
         xmlChecker.check_path(outXmlFileName)
 
     def test_cube(self, tmpdir):
         """Generate a gmy from a simple cubic profile and check the output"""
         cube = fixtures.cube(tmpdir)
-        cube.VoxelSize = 0.23
         cube.StlFileUnitId = 0
-        generator = OutputGeneration.PolyDataGenerator(cube)
+        cube.VoxelSize = 0.11
+        generator = OutputGeneration.GmyPolyDataGenerator(cube)
         generator.Execute()
         # Load back the resulting geometry file and assert things are as
         # expected
         checker = CubeTestingGmyParser(cube.OutputXmlFile, cube.VoxelSize)
         checker.Load()
 
-        fluid_sites = sum(checker.Domain.BlockFluidSiteCounts)
+        fluid_sites = checker.Domain.BlockFluidSiteCounts.sum()
         block_count = len(checker.Domain.Blocks)
         block_size = checker.Domain.BlockSize
         sites = block_count * block_size**3
-        # assert(sites==4096)
-        # assert(fluid_sites==729)
+        assert sites == 4096
+        assert fluid_sites == 729
         assert sites != fluid_sites
         # # Now, turn on the skip-non-intersecting-blocks optimisation, and
         # # assert same result
@@ -100,7 +166,7 @@ class TestPolyDataGenerator:
         )
         cube.Iolets = [inlet, outlet]
 
-        generator = OutputGeneration.PolyDataGenerator(cube)
+        generator = OutputGeneration.GmyPolyDataGenerator(cube)
         # generator.skipNonIntersectingBlocks = True
         generator.Execute()
 
@@ -111,29 +177,34 @@ class TestPolyDataGenerator:
         checker.Load()
 
     def test_cylinder(self, tmpdir):
-        """Generate a gmy from a simple cylinder profile and check the output"""
-        cylinder = fixtures.cylinder(tmpdir)
-        cylinder.VoxelSize = 0.23
-        cylinder.StlFileUnitId = 0
+        """Generate a gmy from a cylinder and check the output.
 
-        """ The default VTK cylinder is 1 length unit long, aligned with the 
+        The cylinder is 1 length unit long, radius 0.5, aligned with the
         y-axis, and centred at the origin of coordinates.
         """
+        dx = 0.11
+        cylinder = fixtures.cylinder(tmpdir)
+        cylinder.VoxelSize = dx
+        cylinder.StlFileUnitId = 0
+
         inlet = Iolet(
             Name="inlet",
-            Centre=Vector(0.0, -0.5, 0.0),
+            Centre=Vector(0.0, -0.45, 0.0),
             Normal=Vector(0.0, -1.0, 0.0),
-            Radius=1,
+            Radius=1.0,
         )
         outlet = Iolet(
             Name="outlet",
-            Centre=Vector(0.0, 0.5, 0.0),
+            Centre=Vector(0.0, 0.45, 0.0),
             Normal=Vector(0.0, 1.0, 0.0),
-            Radius=1,
+            Radius=1.0,
         )
         cylinder.Iolets = [inlet, outlet]
+        L = 0.9
+        R = 0.5
 
-        generator = OutputGeneration.PolyDataGenerator(cylinder)
+        generator = OutputGeneration.GmyPolyDataGenerator(cylinder)
+
         generator.Execute()
         # Load back the resulting geometry file and assert things are as
         # expected
@@ -141,17 +212,17 @@ class TestPolyDataGenerator:
             cylinder.OutputXmlFile,
             cylinder.VoxelSize,
             np.array([0.0, 1.0, 0.0]),
-            1.0,
-            0.5,
+            L,
+            R,
         )
         checker.Load()
 
-        fluid_sites = sum(checker.Domain.BlockFluidSiteCounts)
+        fluid_sites = checker.Domain.BlockFluidSiteCounts.sum()
         block_count = len(checker.Domain.Blocks)
         block_size = checker.Domain.BlockSize
         sites = block_count * block_size**3
         # assert(sites==4096)
-        # assert(fluid_sites==621)
+        assert fluid_sites == 621
         assert sites != fluid_sites
         # # Now, turn on the skip-non-intersecting-blocks optimisation, and
         # # assert same result

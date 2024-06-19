@@ -38,12 +38,14 @@ setup(
         "hlb.converters",
         "hlb.parsers",
         "hlb.parsers.geometry",
+        "hlb.parsers.octree",
         "hlb.surfacegenerator",
         "hlb.utils",
     ],
     ext_modules=ext_modules,
     cmdclass={"build_ext": Cython.Build.build_ext},
     install_requires=[
+        "h5py",
         "numpy",
         "vtk",
     ],
@@ -59,6 +61,7 @@ setup(
             "hlb-gmy-selfconsistent = hlb.parsers.geometry.self_consistency:main",
             "hlb-gmy-countsites = hlb.parsers.geometry.count_sites:main",
             "hlb-gmy-3to4 = hlb.converters.Gmy3to4:main",
+            "hlb-oct2gmy = hlb.parsers.octree:main",
         ],
     },
 )

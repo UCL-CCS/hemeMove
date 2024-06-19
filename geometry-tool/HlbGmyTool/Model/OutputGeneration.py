@@ -3,8 +3,16 @@
 # file AUTHORS. This software is provided under the terms of the
 # license in the file LICENSE.
 
-import numpy as np
+from abc import ABC, abstractmethod
+import math
 import os.path
+import sys
+import time
+from warnings import warn
+
+import numpy as np
+
+np.seterr(divide="ignore")
 
 from vtk import (
     vtkClipPolyData,
@@ -35,19 +43,15 @@ from vtk import (
 from vmtk.vtkvmtk import vtkvmtkPolyDataBoundaryExtractor
 from vmtk.vtkvmtk import vtkvmtkBoundaryReferenceSystems
 
-# from CGAL.CGAL_Polyhedron_3 import Polyhedron_3
-
 from .Iolets import Inlet, Outlet, Iolet
 from .Vector import Vector
 from .Profile import Profile, metre
 from .XmlWriter import XmlWriter
 
-from . import Generation
-
-np.seterr(divide="ignore")
+from . import CommonGeneration
 
 # Add Pythonic printing
-class DoubleVector(Generation.DoubleVector):
+class DoubleVector(CommonGeneration.DoubleVector):
     def __str__(self):
         return f"({self.x}, {self.y}, {self.z})"
 
@@ -60,10 +64,50 @@ def DVfromV(v):
     return DoubleVector(v.x, v.y, v.z)
 
 
-class GeometryGenerator(object):
-    def __init__(self):
-        self.skipNonIntersectingBlocks = False
+try:
+    from . import GmyGeneration
+except ImportError:
+    warn("GMY generation unavailable")
+    GmyGeneration = None
 
+try:
+    from . import OctGeneration
+except ImportError:
+    warn("OCT generation unavailable")
+    OctGeneration = None
+
+if OctGeneration is None and GmyGeneration is None:
+    raise ImportError("No generation extensions available!")
+
+
+# We have several concrete generators we want, shown in this table:
+#
+#          | GMY | OCT
+# ---------+-----+-----
+# PolyData |  X  |  X
+# Duct     |  X  |  -
+# Cylinder |  X  |  -
+#
+# (X == implemented, - == not implemented)
+#
+# The compiled modules for one or other of the back ends might be unavailable
+#
+
+
+# We have four coordinate systems to deal with.
+#
+# 1. The physical system in metres.
+#
+# 2. The profile / surface system, which is a scaling of the physical
+#    system (by profile.StlFileUnit.SizeInMetres)
+#
+# 3. The scaled system which is a simple scaling to lattice units.
+#
+# 4. The working system which is (2) shifted such that a site's lattice
+#    indices (i,j,k) are the same as it's coordinates
+
+
+class GeometryGenerator(ABC):
     def __getattr__(self, attr):
         """Delegate unknown attribute access to profile object."""
         return getattr(self._profile, attr)
@@ -73,12 +117,10 @@ class GeometryGenerator(object):
         nIn = 0
         nOut = 0
         ioletProxies = []
-        for io in self._profile.Iolets:
-            proxy = Generation.Iolet()
+        for io in self.Iolets:
+            proxy = self.genext.Iolet()
 
-            proxy.Centre = DVfromV(io.Centre) / self._profile.VoxelSize
-            proxy.Normal = DVfromV(io.Normal)
-            proxy.Radius = io.Radius / self._profile.VoxelSize
+            self._AddIoletProperties(io, proxy)
 
             if isinstance(io, Inlet):
                 io.Id = proxy.Id = nIn
@@ -88,85 +130,216 @@ class GeometryGenerator(object):
                 io.Id = proxy.Id = nOut
                 proxy.IsInlet = False
                 nOut += 1
-                pass
+
             ioletProxies.append(proxy)
-            continue
         return ioletProxies
 
-    def _SetCommonGeneratorProperties(self):
-        self.generator.SetOutputGeometryFile(str(self._profile.OutputGeometryFile))
-        # # We need to keep a reference to this to make sure it's not GC'ed
-        # self.ioletProxies =
+    @abstractmethod
+    def _AddIoletProperties(self, io, proxy):
+        pass
+
+    def _SetGeneratorProperties(self):
+        """Called at the start of execute.
+
+        Sets up the C++ generator based on our state.
+        """
+        self.generator.SetOutputGeometryFile(str(self.GeneratorOutputFile))
         self.generator.SetIolets(self._MakeIoletProxies())
-        return
+        self._SetExtensionCommonProperties()
+        self._SetGeometryTypeProperties()
+
+    @abstractmethod
+    def _SetExtensionCommonProperties(self):
+        pass
+
+    @abstractmethod
+    def _SetGeometryTypeProperties(self):
+        pass
+
+    @property
+    @abstractmethod
+    def GeneratorOutputFile(self):
+        """Because the file that the C++ writes might not be .gmy"""
+        pass
+
+    @abstractmethod
+    def _Preprocess(self):
+        """Do any preprocessing required (e.g. clip polydata)."""
+        pass
 
     def Execute(self):
-        """Forward this to the C++ implementation."""
+        """Pass our state to C++ implementation and run."""
+        self._Preprocess()
+        self._SetGeneratorProperties()
         t = Timer()
         t.Start()
-        self.generator.Execute(self.skipNonIntersectingBlocks)
-        XmlWriter(self).Write()
+        self._DoExecute()
         t.Stop()
         print("Setup time: %f s" % t.GetTime())
-        return
+        mem, unit = t.GetMem()
+        if mem is not None:
+            print(f"Memory used by generator: {mem} {unit}")
+        XmlWriter(self).Write()
 
-    pass
+    @abstractmethod
+    def _DoExecute(self):
+        """Different call signatures in C++"""
+        pass
+
+
+class GmyMixin:
+    """Behaviour for the direct GMY generation extension."""
+
+    def __init__(self, *args, **kwargs):
+        if GmyGeneration is None:
+            raise RuntimeError("The geometry generator module is not available")
+        self.genext = GmyGeneration
+
+        self.skipNonIntersectingBlocks = False
+        self.BlockSize = 8
+        super().__init__(*args, **kwargs)
+
+    @property
+    def GeneratorOutputFile(self):
+        return self._profile.OutputGeometryFile
+
+    def _SetExtensionCommonProperties(self):
+        self.generator.SetSiteCounts(*self.SiteCounts)
+        self.generator.SetBlockSize(self.BlockSize)
+
+    def _AddIoletProperties(self, io, proxy):
+        proxy.Centre = DVfromV(io.Centre) / self.VoxelSize
+        proxy.Normal = DVfromV(io.Normal)
+        proxy.Radius = io.Radius / self.VoxelSize
+
+    def _DoExecute(self):
+        self.generator.Execute(self.skipNonIntersectingBlocks)
+
+    def _RoundUpSites(self, nsites):
+        return ((nsites - 1) // self.BlockSize + 1) * self.BlockSize
+
+
+class OctMixin:
+    """Behaviour for the octree generation extension."""
+
+    def __init__(self, *args, **kwargs):
+        if OctGeneration is None:
+            raise RuntimeError("The Octree generator module is not available")
+        self.genext = OctGeneration
+        super().__init__(*args, **kwargs)
+
+    @property
+    def OutputOctFile(self):
+        base, ext = os.path.splitext(self._profile.OutputGeometryFile)
+        return base + ".oct"
+
+    @property
+    def GeneratorOutputFile(self):
+        return self.OutputOctFile
+
+    def _SetExtensionCommonProperties(self):
+        pass
+
+    def _DoExecute(self):
+        self.generator.Execute()
+
+    def _RoundUpSites(self, nsites):
+        # Get the biggest of the sides
+        max_sites = int(nSites.max())
+        # Now round this up to the next power of two
+        nBits = max_sites.bit_length()
+        if max_sites > 2 ** (nBits - 1):
+            max_sites = 2**nBits
+            pass
+        self.NumberOfLevels = nBits
+
+        self.CubeSize = max_sites
 
 
 class PolyDataGenerator(GeometryGenerator):
     def __init__(self, profile):
-        """Clip the STL and set attributes on the SWIG-proxied C++
+        """Clip the STL and set attributes on the C++
         GeometryGenerator object.
         """
-        GeometryGenerator.__init__(self)
+        super().__init__()
+        self.DebugPipelineDirectory = None
         self._profile = profile
-        self.generator = Generation.PolyDataGenerator()
-        self._SetCommonGeneratorProperties()
-        self.generator.SetSeedPointWorking(
-            profile.SeedPoint.x / profile.VoxelSize,
-            profile.SeedPoint.y / profile.VoxelSize,
-            profile.SeedPoint.z / profile.VoxelSize,
-        )
+        self.generator = self.genext.PolyDataGenerator()
 
-        # This will create the pipeline for the clipped surface
-        clipper = Clipper(profile)
-
-        # Scale by the voxel size
-        trans = vtkTransform()
-        scale = 1.0 / profile.VoxelSize
-        trans.Scale(scale, scale, scale)
-
-        transformer = vtkTransformFilter()
-        transformer.SetTransform(trans)
-        transformer.SetInputConnection(clipper.ClippedSurfaceSource.GetOutputPort())
-
-        # Uncomment this an insert the output path to debug pipeline construction
-        # write = StageWriter('/Users/rupert/working/compare/aneurysm').WriteOutput
-        # i = 0
-        # for alg in getpipeline(transformer):
-        #     print(i)
-        #     i += 1
-        #     print(alg)
-        #     write(alg)
-
-        transformer.Update()
-        self.ClippedSurface = transformer.GetOutput()
+    def _SetGeometryTypeProperties(self):
         self.generator.SetClippedSurface(self.ClippedSurface)
 
-        originWorking, nSites = self._ComputeOriginWorking()
-        self.generator.SetOriginWorking(*(float(x) for x in originWorking))
-        self.generator.SetSiteCounts(*(int(x) for x in nSites))
-        self.OriginMetres = Vector(originWorking * self.VoxelSizeMetres)
-        return
+    def _Preprocess(self):
+        # This will create the pipeline for the clipped surface
+        clipper = Clipper(self._profile)
+        # Note this is in coord system 2
 
-    def _ComputeOriginWorking(self):
-        """
-        Here we are setting the location of our domain's origin in the input
-        space and the number of sites along each axis. Sites will all have
-        positions of:
-               Origin + Index * VoxelSize,
-        where:
-               0 <= Index[i] < nSites[i]
+        # Scale by the voxel size (to coord sys 3)
+        scaleToLattice = vtkTransform()
+        scale = 1.0 / self.VoxelSize
+        scaleToLattice.Scale(scale, scale, scale)
+
+        scaler = vtkTransformFilter()
+        scaler.SetTransform(scaleToLattice)
+        scaler.SetInputConnection(clipper.ClippedSurfaceSource.GetOutputPort())
+
+        scaler.Update()
+
+        originscaled, nSites = self._ComputeOriginScaled(scaler.GetOutput())
+        self._profile.OriginMetres = Vector(originscaled * self.VoxelSizeMetres)
+        self.SiteCounts = self._RoundUpSites(nSites)
+
+        shiftOrigin = vtkTransform()
+        shiftOrigin.Translate(-originscaled[0], -originscaled[1], -originscaled[2])
+        shifter = vtkTransformFilter()
+        shifter.SetTransform(shiftOrigin)
+        shifter.SetInputConnection(scaler.GetOutputPort())
+
+        shifter.Update()
+        self.ClippedSurface = shifter.GetOutput()
+        # If the attribute has been set, write all the stages of the
+        # pipeline to the folder.
+        if self.DebugPipelineDirectory is not None:
+            sw = StageWriter(self.DebugPipelineDirectory)
+            for alg in getpipeline(shifter):
+                sw.WriteOutput(alg)
+
+    @abstractmethod
+    def _RoundUpSites(self, nSites):
+        pass
+
+    def _fixup_block(self):
+        # Get the biggest of the sides
+        nSites = int(nSites.max())
+        # Now round this up to the next power of two
+        nBits = nSites.bit_length()
+        if nSites > 2 ** (nBits - 1):
+            nSites = 2**nBits
+            pass
+        self.NumberOfLevels = nBits
+
+        for i in range(3):
+            # Now ensure this extra space is equally balanced before & after the
+            # fluid region with the placement of the first site.
+            bmin = SurfaceBoundsWorking[2 * i]
+            bmax = SurfaceBoundsWorking[2 * i + 1]
+            size = bmax - bmin
+            extra = (nSites - 1) - size
+            OriginWorking[i] = bmin - 0.5 * extra
+            continue
+
+        self.OriginWorking = OriginWorking
+        self.CubeSize = nSites
+
+    def _ComputeOriginScaled(self, surface):
+        """Here we are working out the location of our domain's origin
+        and the number of sites along each axis. This function assumes
+        that we are already scaled to lattice units.  Sites will all
+        have positions of:
+
+        Origin + Index
+
+        where: 0 <= Index[i] < nSites[i]
 
         We also require that there be at least one solid site outside the fluid
         sites. For the case of axis-aligned faces which are an integer number
@@ -175,15 +348,15 @@ class PolyDataGenerator(GeometryGenerator):
         close to the surface so we further require that these sites are a
         little further from the bounding box of the PolyData.
         """
-        SurfaceBoundsWorking = self.ClippedSurface.GetBounds()
-        OriginWorking = np.zeros(3, dtype=float)
+        SurfaceBounds = surface.GetBounds()
+        Origin = np.zeros(3, dtype=float)
         nSites = np.zeros(3, dtype=np.uint)
 
         for i in range(3):
             # Bounds of the vtkPolyData
-            min = SurfaceBoundsWorking[2 * i]
-            max = SurfaceBoundsWorking[2 * i + 1]
-            size = max - min
+            bmin = SurfaceBounds[2 * i]
+            bmax = SurfaceBounds[2 * i + 1]
+            size = bmax - bmin
 
             nSites[i] = int(size)
             # Since int() truncates, we have:
@@ -206,15 +379,19 @@ class PolyDataGenerator(GeometryGenerator):
 
             # Now ensure this extra space is equally balanced before & after the
             # fluid region with the placement of the first site.
-            OriginWorking[i] = min - 0.5 * extra
+            Origin[i] = bmin - 0.5 * extra
             continue
 
-        return OriginWorking, nSites
+        return Origin, nSites
 
     pass
 
 
-class CylinderGenerator(GeometryGenerator):
+class GmyPolyDataGenerator(GmyMixin, PolyDataGenerator):
+    pass
+
+
+class CylinderGenerator(GeometryGenerator, GmyMixin):
     def __init__(
         self,
         OutputGeometryFile,
@@ -243,8 +420,8 @@ class CylinderGenerator(GeometryGenerator):
         self._profile.OutputXmlFile = OutputXmlFile
         self._MakeIolets()
 
-        self.generator = Generation.CylinderGenerator()
-        self._SetCommonGeneratorProperties()
+        self.generator = self.genext.CylinderGenerator()
+        self._SetGeneratorProperties()
 
         self.generator.SetCylinderLength(LengthMetres / VoxelSizeMetres)
         self.generator.SetCylinderRadius(RadiusMetres / VoxelSizeMetres)
@@ -275,7 +452,7 @@ class CylinderGenerator(GeometryGenerator):
     pass
 
 
-class SquareDuctGenerator(GeometryGenerator):
+class SquareDuctGenerator(GeometryGenerator, GmyMixin):
     def __init__(
         self,
         OutputGeometryFile,
@@ -308,8 +485,8 @@ class SquareDuctGenerator(GeometryGenerator):
         self._profile.OutputXmlFile = OutputXmlFile
         self._MakeIolets()
 
-        self.generator = Generation.SquareDuctGenerator()
-        self._SetCommonGeneratorProperties()
+        self.generator = self.genext.SquareDuctGenerator()
+        self._SetGeneratorProperties()
 
         self.generator.SetOpenAxis(self.OpenAxis)
         lb = self.Sizes * -0.5
@@ -354,22 +531,32 @@ class SquareDuctGenerator(GeometryGenerator):
 
 
 # TODO: organise this timer
-import time
-
-
-class Timer(object):
+class Timer:
     def __init__(self):
         self._running = False
+
+    @staticmethod
+    def get_hwm():
+        # Only works on Linux
+        if sys.platform != "linux":
+            return None
+        with open("/proc/{pid}/status".format(pid=os.getpid())) as stats:
+            for line in stats:
+                if line.startswith("VmHWM:"):
+                    key, val, unit = line.split()
+                    return (int(val), unit)
 
     def Start(self):
         assert not self._running
         self._running = True
         self._startTime = time.perf_counter()
+        self._startMem = self.get_hwm()
         return
 
     def Stop(self):
         assert self._running
         self._stopTime = time.perf_counter()
+        self._stopMem = self.get_hwm()
         self._running = False
         return
 
@@ -377,6 +564,13 @@ class Timer(object):
         if self._running:
             return time.perf_counter() - self._startTime
         return self._stopTime - self._startTime
+
+    def GetMem(self):
+        if self._startMem is None:
+            return (math.nan, "B")
+        stopMem = self.get_hwm() if self._running else self._stopMem
+        assert self._startMem[1] == stopMem[1]
+        return (stopMem[0] - self._startMem[0], stopMem[1])
 
     pass
 

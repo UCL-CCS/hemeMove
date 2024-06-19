@@ -50,9 +50,9 @@ comment_chars = {
 excluded_files = set(
     (
         ".github/workflows/run-clang-format.py",
-        "geometry-tool/HlbGmyTool/Model/Generation/Point_inside_polyhedron_3.h",
-        "geometry-tool/HlbGmyTool/Model/Generation/PybindVTKTypeCaster.h",
-        "geometry-tool/HlbGmyTool/Model/Generation/Triangle_3_Ray_3_do_intersect.h",
+        "geometry-tool/HlbGmyTool/Model/GmyGeneration/Point_inside_polyhedron_3.h",
+        "geometry-tool/HlbGmyTool/Model/CommonGeneration/PybindVTKTypeCaster.h",
+        "geometry-tool/HlbGmyTool/Model/GmyGeneration/Triangle_3_Ray_3_do_intersect.h",
     )
 )
 
