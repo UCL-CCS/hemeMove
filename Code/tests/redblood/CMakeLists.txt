@@ -9,7 +9,7 @@
 #  FlowExtensionTests.cc
 #  CellIntegrationTests.cc
 #)
-#target_link_libraries(test_rbc_xml PRIVATE TinyXML::TinyXML)
+#target_link_libraries(test_rbc_xml PRIVATE tinyxml2::tinyxml2)
 #set(src_needs_xml
 #)
 
@@ -62,13 +62,13 @@ add_test_lib(test_redblood
   FedosovValidationTests.cc
 )
 
-target_link_libraries(test_redblood PRIVATE VTK::CommonCore TinyXML::TinyXML)
+target_link_libraries(test_redblood PRIVATE VTK::CommonCore tinyxml2::tinyxml2)
 
 add_test_lib(test_mpi_rbc_xml
   parallel/MPISpreadForcesTests.cc
   parallel/MPIIntegrateVelocities.cc
 )
-target_link_libraries(test_mpi_rbc_xml PRIVATE TinyXML::TinyXML)
+target_link_libraries(test_mpi_rbc_xml PRIVATE tinyxml2::tinyxml2)
 
 add_test_lib(test_mpi_redblood
   Fixtures.cc

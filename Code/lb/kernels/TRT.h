@@ -8,7 +8,7 @@
 
 #include <cstdlib>
 #include "lb/HFunction.h"
-#include "util/utilityFunctions.h"
+#include "util/numerical.h"
 
 namespace hemelb::lb
 {

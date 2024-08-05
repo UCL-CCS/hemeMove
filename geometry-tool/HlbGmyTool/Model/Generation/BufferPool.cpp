@@ -16,18 +16,18 @@ BufferPool::~BufferPool() {
   }
 }
 
-char* BufferPool::New() {
+std::byte* BufferPool::New() {
   // If the stack is empty, create a new array, otherwise pop an array
   if (this->unused.empty()) {
-    return new char[this->size];
+    return new std::byte[this->size];
   } else {
-    char* ans = this->unused.top();
+    std::byte* ans = this->unused.top();
     this->unused.pop();
     return ans;
   }
 }
 
-void BufferPool::Free(char* buf) {
+void BufferPool::Free(std::byte* buf) {
   // If the buffer is NULL, skip
   if (buf == NULL)
     return;

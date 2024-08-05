@@ -13,7 +13,7 @@
 #include "redblood/CellController.h"
 #include "redblood/parallel/CellParallelization.h"
 #include "configuration/CommandLine.h"
-#include "SimulationMaster.h"
+#include "SimulationController.h"
 #include "tests/redblood/Fixtures.h"
 #include "tests/helpers/LatticeDataAccess.h"
 #include "tests/helpers/FolderTestFixture.h"
@@ -24,7 +24,7 @@ namespace hemelb::tests
 {
     using namespace redblood;
     //! Parallel and Sequential move in lock step
-    class MPILockStepTests : public helpers::FolderTestFixture
+    class MPILockStepTests : public OpenSimFixture
     {
     public:
         MPILockStepTests();
@@ -35,28 +35,12 @@ namespace hemelb::tests
         }
 
     protected:
-        std::shared_ptr<configuration::CommandLine> options;
-
-        //! Meta-function to create simulation type
-        template<class STENCIL>
-        using MasterSim = OpenedSimulationMaster<Traits<
-                lb::DefaultLattice, lb::GuoForcingLBGK, lb::Normal,
-                lb::DefaultStreamer, lb::DefaultWallStreamer, lb::DefaultInletStreamer, lb::DefaultOutletStreamer,
-                STENCIL
-        >>;
-
-        //! Creates a master simulation
-        template<class STENCIL>
-        [[nodiscard]] auto CreateMasterSim(net::IOCommunicator const &comm) const
-        {
-            return std::make_shared<MasterSim<STENCIL>>(*options, comm);
-        }
 
         template<class STENCIL> void Check();
     };
 
 
-    MPILockStepTests::MPILockStepTests(): FolderTestFixture() {
+    MPILockStepTests::MPILockStepTests(): OpenSimFixture() {
       // Have everything ready to creates simulations
       if (Comms().Rank() == 0) {
 	CopyResourceToTempdir("cyl_l100_r5.xml");
@@ -81,24 +65,24 @@ namespace hemelb::tests
 	    result });
     }
 
-    void checkBarycenter(net::MpiCommunicator const &world, CellContainer const &cells) {
+    void checkBarycentre(net::MpiCommunicator const &world, CellContainer const &cells) {
       std::vector<uint64_t> uuids;
-      std::vector<LatticePosition> barycenters;
+      std::vector<LatticePosition> barycentres;
       for(auto const &cell: cells) {
 	uuids.push_back(*static_cast<uint64_t const*>(static_cast<void const*>(&cell->GetTag())));
-	barycenters.push_back(cell->GetBarycenter());
+	barycentres.push_back(cell->GetBarycentre());
       }
       uuids = world.Gather(uuids, 0);
-      barycenters = world.Gather(barycenters, 0);
+      barycentres = world.Gather(barycentres, 0);
       if(world.Rank() == 0) {
 	REQUIRE(uuids.size() == 2 * cells.size());
 	std::map<uint64_t, LatticePosition> serial;
 	for(std::size_t i(0); i < cells.size(); ++i) {
-	  serial[uuids[i]] = barycenters[i];
+	  serial[uuids[i]] = barycentres[i];
 	}
 	for(std::size_t i(serial.size()); i < uuids.size(); ++i) {
 	  REQUIRE(std::size_t(1) == serial.count(uuids[i]));
-	  REQUIRE(ApproxV(barycenters[i]).Margin(1e-11) == serial[uuids[i]]);
+	  REQUIRE(ApproxV(barycentres[i]).Margin(1e-11) == serial[uuids[i]]);
 	}
       }
       world.Barrier();
@@ -144,7 +128,7 @@ namespace hemelb::tests
     template<class STENCIL>
     void MPILockStepTests::Check()
     {
-        using Traits = typename MasterSim<STENCIL>::Traits;
+        using Traits = MyTraits<STENCIL>;
 
         auto const world = Comms();
         auto const color = world.Rank() == 0;
@@ -155,10 +139,10 @@ namespace hemelb::tests
             return;
         }
 
-        auto master = CreateMasterSim<STENCIL>(split);
-        REQUIRE(master);
+        auto sim = CreateSim<STENCIL>(split);
+        REQUIRE(sim);
 
-        auto controller = std::static_pointer_cast<CellController<Traits>>(master->GetCellController());
+        auto controller = std::static_pointer_cast<CellController<Traits>>(sim->GetCellController());
         auto const originalCellInserter = controller->GetCellInsertion();
         auto rank = world.Rank();
         auto cellInserter = [&originalCellInserter, rank](CellInserter const &adder) {
@@ -176,16 +160,16 @@ namespace hemelb::tests
         std::size_t nbtests = 0;
         controller->AddCellChangeListener(
                 [&] (CellContainer const& cells) {
-                    return checkNonZeroForceSites(world, master->GetFieldData(), nbtests, cells); }
+                    return checkNonZeroForceSites(world, sim->GetFieldData(), nbtests, cells); }
         );
         controller->AddCellChangeListener(
                 [&](CellContainer const& cells) {
-                    return checkBarycenter(world, cells);
+                    return checkBarycentre(world, cells);
                 });
 
         // run the simulation
-        master->RunSimulation();
-        master->Finalise();
+        sim->RunSimulation();
+        sim->Finalise();
         REQUIRE((nbtests > 0 or world.Rank() != 0));
     }
 

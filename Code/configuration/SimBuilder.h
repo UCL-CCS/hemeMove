@@ -6,11 +6,14 @@
 #ifndef HEMELB_CONFIGURATION_SIMBUILDER_H
 #define HEMELB_CONFIGURATION_SIMBUILDER_H
 
+#include "SimulationController.h"
 #include "configuration/SimConfig.h"
 #include "extraction/LbDataSourceIterator.h"
 #include "extraction/PropertyActor.h"
+#include "io/Checkpointer.h"
 #include "geometry/GmyReadResult.h"
 #include "geometry/neighbouring/NeighbouringDataManager.h"
+#include "lb/lb.hpp"
 #include "lb/InitialCondition.h"
 #include "lb/StabilityTester.h"
 #include "lb/IncompressibilityChecker.hpp"
@@ -27,6 +30,7 @@
 #endif
 
 namespace hemelb::extraction { class PropertyActor; }
+namespace hemelb::io { class Checkpointer; }
 namespace hemelb::lb {
     class InOutLet;
 }
@@ -50,18 +54,35 @@ namespace hemelb::configuration {
         std::shared_ptr<util::UnitConverter> unit_converter;
 
     public:
+        template <typename TraitsT>
+        static std::unique_ptr<SimulationController> CreateSim(
+                CommandLine const& options,
+                net::IOCommunicator const& ioComms
+        ) {
+            auto ans = std::unique_ptr<SimulationController>(new SimulationController(ioComms));
+            // Start the main timer!
+            ans->timings.total().Start();
+
+            ans->fileManager = std::make_shared<configuration::PathManager>(
+                    options,
+                    ioComms.OnIORank(),
+                    ioComms.Size()
+            );
+            auto&& infile = ans->fileManager->GetInputFile();
+            log::Logger::Log<log::Info, log::Singleton>("Reading configuration from %s", infile.c_str());
+            // Convert XML to configuration
+            ans->simConfig = configuration::SimConfig::New(infile);
+            // Use it to initialise self
+            auto builder = configuration::SimBuilder(ans->simConfig);
+            log::Logger::Log<log::Info, log::Singleton>("Beginning Initialisation.");
+            builder.build<TraitsT>(*ans);
+            return ans;
+        }
+
         explicit SimBuilder(SimConfig const& conf, bool construct_unit_converter = true);
         virtual ~SimBuilder() = default;
 
         [[nodiscard]] std::shared_ptr<util::UnitConverter const> GetUnitConverter() const;
-
-        template<typename T>
-        void GetDimensionalValueInLatticeUnits(const io::xml::Element& elem,
-                                               const std::string& units, T& value)
-        {
-            GetDimensionalValue(elem, units, value);
-            value = unit_converter->ConvertToLatticeUnits(units, value);
-        }
 
         template<typename T>
         T ConvertToLatticeUnits(T const& val, std::string_view units)
@@ -69,9 +90,9 @@ namespace hemelb::configuration {
             return unit_converter->template ConvertToLatticeUnits(units, val);
         }
 
-        // Fully build the T = SimulationMaster<Traits> from the configuration.
-        template <typename T>
-        void operator()(T & control) const;
+        // Fully build the T = SimulationController<Traits> from the configuration.
+        template <typename TRAITS = hemelb::Traits<>>
+        void build(SimulationController& control) const;
 
         // The below could probably be protected/private, but handy for testing.
         [[nodiscard]] std::shared_ptr<lb::SimulationState> BuildSimulationState() const;
@@ -95,31 +116,39 @@ namespace hemelb::configuration {
         [[nodiscard]] std::shared_ptr<redblood::FlowExtension> BuildFlowExtension(FlowExtensionConfig const& conf) const;
 
         [[nodiscard]] std::shared_ptr<net::IteratedAction> BuildColloidController() const;
-        template <typename T>
-        [[nodiscard]] std::shared_ptr<net::IteratedAction> BuildCellController(T const& control, reporting::Timers& timings) const;
+        template <typename traitsType>
+        [[nodiscard]] std::shared_ptr<net::IteratedAction> BuildCellController(SimulationController const& control, reporting::Timers& timings) const;
         [[nodiscard]] lb::InitialCondition BuildInitialCondition() const;
         [[nodiscard]] std::shared_ptr<extraction::PropertyActor> BuildPropertyExtraction(
                 std::filesystem::path const& xtr_path,
-                const lb::SimulationState& simState,
-                extraction::IterableDataSource& dataSource,
+                std::shared_ptr<lb::SimulationState const> simState,
+                std::shared_ptr<extraction::IterableDataSource> dataSource,
                 reporting::Timers& timings,
                 const net::IOCommunicator& ioComms
         ) const;
+
+        [[nodiscard]] std::shared_ptr<io::Checkpointer> BuildCheckpointer(
+                std::filesystem::path const& cp_path,
+                std::shared_ptr<lb::SimulationState const> simState,
+                std::shared_ptr<extraction::IterableDataSource> dataSource,
+                reporting::Timers& timings,
+                const net::IOCommunicator& ioComms
+        ) const;
+
         [[nodiscard]] std::shared_ptr<reporting::Reporter> BuildReporter(
-                io::PathManager const& fileManager,
+                PathManager const& fileManager,
                 std::vector<reporting::Reportable*> const & reps
         ) const;
     };
 
 
-    template <typename T>
-    void SimBuilder::operator()(T& control) const {
-        using traitsType = typename T::Traits;
-        using latticeType = typename T::latticeType;
+    template <typename traitsType>
+    void SimBuilder::build(SimulationController& control) const {
+        using LatticeType = typename traitsType::Lattice;
 
         auto& timings = control.timings;
         auto& ioComms = control.ioComms;
-        auto& lat_info = latticeType::GetLatticeInfo();
+        auto& lat_info = LatticeType::GetLatticeInfo();
 
         control.unitConverter = unit_converter;
 
@@ -130,12 +159,12 @@ namespace hemelb::configuration {
         });
 
         std::vector<std::pair<net::phased::Concern*, unsigned>> actors_to_register_for_phase;
-        auto maybe_register_actor = [&](std::shared_ptr<net::phased::Concern> const& p, unsigned i) {
+        auto maybe_register_actor = [&] <std::derived_from<net::phased::Concern> C> (std::shared_ptr<C> const& p, unsigned i) {
             if (p)
                 actors_to_register_for_phase.emplace_back(p.get(), i);
         };
 
-        timings[reporting::Timers::latDatInitialise].Start();
+        timings.latDatInitialise().Start();
         // Use a reader to read in the file.
         log::Logger::Log<log::Info, log::Singleton>("Loading and decomposing geometry file %s.", config.GetDataFilePath().c_str());
         auto readGeometryData = ReadGmy(lat_info, timings, ioComms);
@@ -147,7 +176,7 @@ namespace hemelb::configuration {
         log::Logger::Log<log::Info, log::Singleton>("Initialising field data.");
         control.fieldData = std::make_shared<geometry::FieldData>(control.domainData);
         things_to_report.push_back(control.domainData.get());
-        timings[reporting::Timers::latDatInitialise].Stop();
+        timings.latDatInitialise().Stop();
 
         log::Logger::Log<log::Info, log::Singleton>("Initialising neighbouring data manager.");
         auto ndm =
@@ -195,7 +224,7 @@ namespace hemelb::configuration {
         );
         maybe_register_actor(control.outletValues, 1);
 
-        maybe_register_actor(control.cellController = BuildCellController<T>(control, timings), 1);
+        maybe_register_actor(control.cellController = BuildCellController<traitsType>(control, timings), 1);
 
         // Copy cos about to scale to lattice units.
         auto mon_conf = config.GetMonitoringConfiguration();
@@ -204,7 +233,7 @@ namespace hemelb::configuration {
         }
 
         // Always track stability
-        control.stabilityTester = std::make_shared<lb::StabilityTester<latticeType>>(
+        control.stabilityTester = std::make_shared<lb::StabilityTesterImpl<LatticeType>>(
                 control.fieldData,
                 &control.communicationNet,
                 &*control.simulationState,
@@ -244,12 +273,20 @@ namespace hemelb::configuration {
 
         control.propertyExtractor = BuildPropertyExtraction(
                 control.fileManager->GetDataExtractionPath(),
-                *control.simulationState,
-                *control.propertyDataSource,
+                control.simulationState,
+                control.propertyDataSource,
                 timings,
                 ioComms
         );
         maybe_register_actor(control.propertyExtractor, 1);
+
+        control.checkpointer = BuildCheckpointer(
+                control.fileManager->GetCheckpointPath(),
+                control.simulationState,
+                control.propertyDataSource,
+                timings,
+                ioComms
+        );
 
         control.netConcern = std::make_shared<net::phased::NetConcern>(
                 control.communicationNet
@@ -283,12 +320,10 @@ namespace hemelb::configuration {
     }
 #endif
 
-    template <typename T>
-    [[nodiscard]] std::shared_ptr<net::IteratedAction> SimBuilder::BuildCellController(T const& control, reporting::Timers& timings) const {
+    template <typename traitsType>
+    [[nodiscard]] std::shared_ptr<net::IteratedAction> SimBuilder::BuildCellController(SimulationController const& control, reporting::Timers& timings) const {
         if (config.HasRBCSection()) {
 #ifdef HEMELB_BUILD_RBC
-            using traitsType = typename T::Traits;
-
             auto ccb = redblood::CellControllerBuilder(unit_converter);
 
             auto& ioComms = control.ioComms;

@@ -58,6 +58,7 @@ namespace hemelb::geometry
         friend class tests::helpers::LatticeDataAccess;
 
     public:
+
         template<class TRAITS>
         friend class lb::LBM; //! Let the LBM have access to internals so it can initialise the distribution arrays.
         template<class LatticeData>
@@ -179,7 +180,7 @@ namespace hemelb::geometry
          */
         inline site_t const& GetLocalFluidSiteCount() const
         {
-          return shared_counts.Span()[2 * COLLISION_TYPES];
+          return shared_site_type_indices.Span()[2 * COLLISION_TYPES];
         }
 
         site_t GetContiguousSiteId(util::Vector3D<site_t> location) const;
@@ -254,8 +255,30 @@ namespace hemelb::geometry
         // Will do RMA iff required data not cached.
         bool IsSiteDomainEdge(int rank, site_t local_idx) const;
 
-        site_t GetMidDomainSiteCount() const;
-        site_t GetDomainEdgeSiteCount() const;
+        inline site_t GetMidDomainSiteCount() const {
+            return shared_site_type_indices.Span()[COLLISION_TYPES];
+        }
+        inline site_t GetDomainEdgeSiteCount() const {
+            return shared_site_type_indices.Span()[2 * COLLISION_TYPES] - GetMidDomainSiteCount();
+        }
+
+        inline std::pair<site_t, site_t> GetMidDomainSiteRange(unsigned ct) const {
+            auto&& span = shared_site_type_indices.Span();
+            return {span[ct], span[ct+1]};
+        }
+        inline std::pair<site_t, site_t> GetDomainEdgeSiteRange(unsigned ct) const {
+            auto&& span = shared_site_type_indices.Span();
+            return {span[COLLISION_TYPES + ct], span[COLLISION_TYPES + ct + 1]};
+        }
+
+        inline std::pair<site_t, site_t> GetAllMidDomainSiteRange() const {
+            auto&& span = shared_site_type_indices.Span();
+            return {span[0], span[COLLISION_TYPES]};
+        }
+        inline std::pair<site_t, site_t> GetAllDomainEdgeSiteRange() const {
+            auto&& span = shared_site_type_indices.Span();
+            return {span[COLLISION_TYPES], span[2 * COLLISION_TYPES]};
+        }
 
         /**
          * Number of sites with all fluid neighbours residing on this rank, for the given
@@ -263,9 +286,10 @@ namespace hemelb::geometry
          * @param collisionType
          * @return
          */
-        inline site_t const& GetMidDomainCollisionCount(unsigned int collisionType) const
+        inline site_t GetMidDomainSiteCount(unsigned int collisionType) const
         {
-          return shared_counts.Span()[collisionType];
+            auto [begin, end] = GetMidDomainSiteRange(collisionType);
+            return end - begin;
         }
 
         /**
@@ -274,26 +298,17 @@ namespace hemelb::geometry
          * @param collisionType
          * @return
          */
-        inline site_t const& GetDomainEdgeCollisionCount(unsigned int collisionType) const
+        inline site_t GetDomainEdgeSiteCount(unsigned int collisionType) const
         {
-          return shared_counts.Span()[COLLISION_TYPES + collisionType];
+            auto [begin, end] = GetDomainEdgeSiteRange(collisionType);
+            return end - begin;
+
         }
 
-    private:
-        // The setters should be private
-        inline site_t& MidDomainCollisionCount(unsigned int collisionType)
-        {
-            return shared_counts.Span()[collisionType];
-        }
-        inline site_t& DomainEdgeCollisionCount(unsigned int collisionType)
-        {
-            return shared_counts.Span()[COLLISION_TYPES + collisionType];
-        }
         inline site_t& LocalFluidSiteCount()
         {
-            return shared_counts.Span()[2 * COLLISION_TYPES];
+            return shared_site_type_indices.Span()[2 * COLLISION_TYPES];
         }
-    public:
 
         /**
          * Get the number of fluid sites on the given rank.
@@ -342,7 +357,7 @@ namespace hemelb::geometry
         inline Site<Domain const> GetSite(site_t i) const {
             return Site<Domain const>{i, *this};
         }
-      protected:
+    protected:
         /**
          * The protected default constructor does nothing. It exists to allow derivation from this
          * class for the purpose of testing.
@@ -354,18 +369,21 @@ namespace hemelb::geometry
 
         void ProcessReadSites(const GmyReadResult& readResult);
 
-        // TODO: should these parameters be copies?
+        template <typename T>
+        using ArrayOfVectors = std::array<std::vector<T>, COLLISION_TYPES>;
+
+        struct ReadDataBundle {
+            ArrayOfVectors<site_t> blockNumbers;
+            ArrayOfVectors<site_t> siteNumbers;
+            ArrayOfVectors<SiteData> siteData;
+            ArrayOfVectors<util::Vector3D<float> > wallNormals;
+            ArrayOfVectors<float> wallDistance;
+        };
+
         void PopulateWithReadData(
-            const std::vector<site_t> midDomainBlockNumbers[COLLISION_TYPES],
-            const std::vector<site_t> midDomainSiteNumbers[COLLISION_TYPES],
-            const std::vector<SiteData> midDomainSiteData[COLLISION_TYPES],
-            const std::vector<util::Vector3D<float> > midDomainWallNormals[COLLISION_TYPES],
-            const std::vector<float> midDomainWallDistance[COLLISION_TYPES],
-            const std::vector<site_t> domainEdgeBlockNumbers[COLLISION_TYPES],
-            const std::vector<site_t> domainEdgeSiteNumbers[COLLISION_TYPES],
-            const std::vector<SiteData> domainEdgeSiteData[COLLISION_TYPES],
-            const std::vector<util::Vector3D<float> > domainEdgeWallNormals[COLLISION_TYPES],
-            const std::vector<float> domainEdgeWallDistance[COLLISION_TYPES]);
+                ReadDataBundle const& midDomain,
+                ReadDataBundle const& domainEdge
+        );
 
         void CollectFluidSiteDistribution();
         void CollectGlobalSiteExtrema();
@@ -503,11 +521,14 @@ namespace hemelb::geometry
         std::vector<NeighbouringProcessor> neighbouringProcs; //! Info about processors with neighbouring fluid sites.
 
         // In this window, we store the counts of stuff that need to be PGAS accessible.
-        // First COLLISION_TYPES midDomainProcCollisions; //! Number of fluid sites with all fluid neighbours on this rank, for each collision type.
-        // Second COLLISION_TYPES> domainEdgeProcCollisions; //! Number of fluid sites with at least one fluid neighbour on another rank, for each collision type.
-        // Last  localFluidSites; //! The number of local fluid sites.
+        // A mid-domain site has all its neighbours also on this rank
+        // A domain edge site has at least one neighbour on another rank
+        // First, the start index of the mid-domain sites, grouped by their collision type.
+        // Next, the start index of the domain-edge sites, grouped by the collision type.
+        // Finally, the total number of local fluid sites.
+        // Thus index i + 1 holds the past-the-end index for range i
         static constexpr MPI_Aint N_SHARED = 2 * COLLISION_TYPES + 1;
-        net::WinData<site_t, N_SHARED> shared_counts;
+        net::WinData<site_t, N_SHARED> shared_site_type_indices;
         // Here we cache this data locally, since we expect to need
         // only a small number of other process's data, but many times
         using SharedCountArray = std::array<site_t, N_SHARED>;

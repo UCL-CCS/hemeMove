@@ -17,39 +17,39 @@ namespace hemelb::tests::helpers
         // +2 for the halo of empty valid locations around the cube
         latDat.reset(FourCubeLatticeData::Create(Comms(), cubesize + 2));
         dom = &latDat->GetDomain();
-        simConfig = std::make_unique<OneInOneOutSimConfig>();
-        simBuilder = std::make_unique<configuration::SimBuilder>(*simConfig);
+        OneInOneOutSimConfigReader reader;
+        simConfig = reader.Read();
+        simBuilder = std::make_unique<configuration::SimBuilder>(simConfig);
 
         simState = simBuilder->BuildSimulationState();
         lbmParams = lb::LbmParameters(simState->GetTimeStepLength(),
-                                      simConfig->GetVoxelSize());
+                                      simConfig.GetVoxelSize());
         unitConverter = simBuilder->GetUnitConverter();
 
         initParams.latDat = &latDat->GetDomain();
-        initParams.siteCount = initParams.latDat->GetLocalFluidSiteCount();
         initParams.lbmParams = &lbmParams;
         numSites = initParams.latDat->GetLocalFluidSiteCount();
     }
 
-    FourCubeBasedTestFixtureBase::~FourCubeBasedTestFixtureBase() {}
+    FourCubeBasedTestFixtureBase::~FourCubeBasedTestFixtureBase() = default;
 
     lb::BoundaryValues FourCubeBasedTestFixtureBase::BuildIolets(
             geometry::SiteType tp,
             std::vector<configuration::IoletConfig> const& conf
     ) const {
-        return lb::BoundaryValues(tp,
-                                          *dom,
-                                          simBuilder->BuildIolets(conf),
-                                          simState.get(),
-                                          Comms(),
-                                          *unitConverter);
+        return {tp,
+                *dom,
+                simBuilder->BuildIolets(conf),
+                simState.get(),
+                Comms(),
+                *unitConverter};
     }
 
     lb::BoundaryValues FourCubeBasedTestFixtureBase::BuildIolets(
             geometry::SiteType tp
     ) const {
         REQUIRE((tp == geometry::INLET_TYPE || tp == geometry::OUTLET_TYPE));
-        auto conf = (tp == geometry::INLET_TYPE) ? simConfig->GetInlets() : simConfig->GetOutlets();
+        auto conf = (tp == geometry::INLET_TYPE) ? simConfig.GetInlets() : simConfig.GetOutlets();
         return BuildIolets(tp, conf);
     }
 

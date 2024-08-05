@@ -1,9 +1,8 @@
 <?xml version="1.0" ?>
-<hemelbsettings version="5">
+<hemelbsettings version="6">
   <simulation>
     <step_length units="s" value="1.852e-08" />
     <steps units="lattice" value="12000" />
-    <stresstype value="1" />
     <voxel_size units="m" value="3.333e-07" />
     <origin units="m" value="(-5.16615e-06,-5.16615e-06,-5.016165e-05)" />
   </simulation>
@@ -13,8 +12,8 @@
   <inlets>
     <inlet>
       <condition subtype="cosine" type="pressure">
-        <mean units="mmHg" value="108.01" />
-        <amplitude units="mmHg" value="0.0" />
+        <mean units="Pa" value="108.01" />
+        <amplitude units="Pa" value="0.0" />
         <phase units="rad" value="0.0" />
         <period units="s" value="1" />
       </condition>
@@ -26,6 +25,7 @@
         <fadelength units="m" value="3e-06" />
       </flowextension>
       <insertcell template="default">
+	<seed value="321" />
         <every units="s" value="1"/>
         <offset units="s" value="1.852e-6"/>
         <delta_t units="s" value="0e0"/>
@@ -41,8 +41,8 @@
   <outlets>
     <outlet>
       <condition subtype="cosine" type="pressure">
-        <mean units="mmHg" value="0.0" />
-        <amplitude units="mmHg" value="0.0" />
+        <mean units="Pa" value="0.0" />
+        <amplitude units="Pa" value="0.0" />
         <phase units="rad" value="0.0" />
         <period units="s" value="1" />
       </condition>
@@ -55,21 +55,9 @@
       </flowextension>      
     </outlet>
   </outlets>
-  <visualisation>
-    <centre units="m" value="(0.0,0.0,0.0)" />
-    <orientation>
-      <longitude units="deg" value="45.0" />
-      <latitude units="deg" value="45.0" />
-    </orientation>
-    <display brightness="0.03" zoom="1.0" />
-    <range>
-      <maxvelocity units="m/s" value="0.1" />
-      <maxstress units="Pa" value="0.1" />
-    </range>
-  </visualisation>
   <initialconditions>
     <pressure>
-      <uniform units="mmHg" value="0.0" />
+      <uniform units="Pa" value="0.0" />
     </pressure>
   </initialconditions>
   <redbloodcells>
@@ -86,7 +74,7 @@
       <cutoffdistance units="lattice" value="1.0" />
       <exponent value="2"/>
     </cell2Wall>
-    <cells>
+    <templates>
       <cell name="default">
         <moduli>
           <bending units="lattice" value="0.002087" />
@@ -98,9 +86,12 @@
         <shape mesh_path="rbc_ico_2880.msh" mesh_format="Krueger" />
         <scale units="m" value="4e-06" />
       </cell>
-    </cells>
+    </templates>
     <output>
-      <period units="lattice" value="500" />
+      <vtk>
+        <period units="lattice" value="500" />
+        <physical units="bool" value="true" />
+      </vtk>
     </output>
   </redbloodcells>
   <monitoring>

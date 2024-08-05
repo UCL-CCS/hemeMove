@@ -268,7 +268,7 @@ class IoletsDetailPanel(wx.Panel):
             VectorCtrlMapper(self.normalVector, "Value", wx.EVT_TEXT),
         )
 
-        pressureLabel = wx.StaticText(self, label="Pressure / mmHg")
+        pressureLabel = wx.StaticText(self, label="Pressure / Pa")
         self.pressureVector = VectorCtrl(self)
         controller.BindValue(
             "Iolets.Selection.Pressure",

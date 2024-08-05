@@ -12,11 +12,11 @@ namespace hemelb
   {
     LatticeEnergy FaderCell::operator()() const
     {
-      auto const barycenter = wrappee->GetBarycenter();
+      auto const barycentre = wrappee->GetBarycentre();
       auto const energy = wrappee->Energy();
       for (auto const& extension : *iolets)
       {
-        auto const weight = linearWeight(extension, barycenter);
+        auto const weight = linearWeight(extension, barycentre);
         if (weight > 1e-12)
         {
           return energy * weight;
@@ -27,11 +27,11 @@ namespace hemelb
 
     LatticeEnergy FaderCell::operator()(std::vector<LatticeForceVector> &forces) const
     {
-      auto const barycenter = wrappee->GetBarycenter();
+      auto const barycentre = wrappee->GetBarycentre();
       auto const energy = wrappee->Energy(forces);
       for (auto const& extension : *iolets)
       {
-        auto const weight = linearWeight(extension, barycenter);
+        auto const weight = linearWeight(extension, barycentre);
         if (weight > 1e-12)
         {
           for (auto& force : forces)

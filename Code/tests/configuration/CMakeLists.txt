@@ -5,4 +5,5 @@
 add_test_lib(test_configuration
   CommandLineTests.cc
   SimConfigTests.cc
+  PathManagerTests.cc
   )

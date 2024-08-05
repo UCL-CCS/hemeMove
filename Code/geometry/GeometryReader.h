@@ -39,7 +39,7 @@ namespace hemelb::geometry
     private:
         // Read from the file into a buffer on all processes.
         // This is collective and start and nBytes must be the same on all ranks.
-        std::vector<char> ReadAllProcesses(std::size_t startBytes, unsigned nBytes);
+        std::vector<std::byte> ReadAllProcesses(std::size_t startBytes, unsigned nBytes);
 
         // Read the preamble and create the empty read result.
         GmyReadResult ReadPreamble();
@@ -49,7 +49,7 @@ namespace hemelb::geometry
         void ReadHeader(site_t blockCount);
 
         // map from block GMY index to vect of data
-        using block_cache = std::map<U64, std::vector<char>>;
+        using block_cache = std::map<U64, std::vector<std::byte>>;
 
         // Load compressed data from the file if the predicate is true for that block's GMY index.
         template <std::predicate<std::size_t> PredT>
@@ -70,10 +70,10 @@ namespace hemelb::geometry
 
         // Parse a compressed block of data into the geometry at the given GMY index
         void DeserialiseBlock(GmyReadResult& geometry,
-                              std::vector<char> const& compressed_data, site_t block_gmy);
+                              std::vector<std::byte> const& compressed_data, site_t block_gmy);
 
         // Decompress the block data
-        std::vector<char> DecompressBlockData(const std::vector<char>& compressed,
+        std::vector<std::byte> DecompressBlockData(const std::vector<std::byte>& compressed,
                                               const unsigned int uncompressedBytes);
 
         // Given a reader for a block's data, parse that into the

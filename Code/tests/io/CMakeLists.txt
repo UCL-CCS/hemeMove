@@ -4,8 +4,8 @@
 # license in the file LICENSE.
 add_test_lib(test_io
   xdr_test_data.cc
-  PathManagerTests.cc
   XdrWriterTests.cc
   XdrReaderTests.cc
   xml.cc
+  hexfloat.cc
 )

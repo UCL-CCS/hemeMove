@@ -13,31 +13,35 @@
 namespace hemelb::util
 {
     //! For-ranged loop plus enumeration
-    template<class WrappedIterT, class CounterT = std::iter_difference_t<WrappedIterT>>
+    template<std::forward_iterator WrappedIter, std::sentinel_for<WrappedIter> WrappedEnd, class CounterT = std::iter_difference_t<WrappedIter>>
     class Enumerate
     {
     protected:
-        WrappedIterT first;
-        WrappedIterT last;
-
+        WrappedIter first;
+        WrappedEnd last;
+        using WrappedRefT = std::iter_reference_t<WrappedIter>;
         //! Holds info about enumeration
         struct EnumerateItem
         {
             CounterT index;
-            typename WrappedIterT::reference value;
+            WrappedRefT value;
         };
 
     public:
+        struct sentinel {
+            WrappedEnd sent;
+        };
+
         class iterator
         {
         protected:
             CounterT index;
-            WrappedIterT iter;
+            WrappedIter iter;
         public:
-            explicit iterator(WrappedIterT const &iter) : index(0), iter(iter)
+            explicit iterator(WrappedIter const &iter) : index(0), iter(iter)
             {
             }
-            iterator(WrappedIterT const &iter, size_t index) : index(index), iter(iter)
+            iterator(WrappedIter const &iter, size_t index) : index(index), iter(iter)
             {
             }
             iterator& operator++()
@@ -56,41 +60,69 @@ namespace hemelb::util
             {
               return {index, *iter};
             }
-            friend auto operator<=>(const iterator&, const iterator&) = default;
+
+            friend bool operator==(const iterator& l, const iterator& r) {
+                return l.iter == r.iter;
+            }
+
+            friend bool operator==(iterator const& it, sentinel const& s)
+            requires (!std::same_as<WrappedIter, WrappedEnd>)
+            {
+                return it.iter == s.sent;
+            }
         };
 
-        Enumerate(WrappedIterT const &first, WrappedIterT const &last) : first(first), last(last)
+        Enumerate(WrappedIter const &first, WrappedEnd const &last) : first(first), last(last)
         {
         }
         iterator begin() const
         {
           return {first, 0};
         }
-        iterator end() const
+        auto end() const
         {
-          return iterator(last, std::distance(first, last));
+            if constexpr (std::same_as<WrappedIter, WrappedEnd>) {
+                return iterator(last, std::distance(first, last));
+            } else {
+                return sentinel{last};
+            }
         }
     };
 
     //! Ranged-for loops with enumeration
-    template<class C>
-    auto enumerate(C&& c) -> Enumerate<decltype(begin(std::forward<C>(c)))>
+    template<class CONTAINER>
+    auto enumerate(CONTAINER&& c)
     {
-      return {begin(std::forward<C>(c)), end(std::forward<C>(c))};
+        using namespace std;
+        auto b = begin(std::forward<CONTAINER>(c));
+        auto e = end(std::forward<CONTAINER>(c));
+        using IterT = decltype(b);
+        using IterOrSentinelT = decltype(e);
+        return Enumerate<IterT, IterOrSentinelT>(b, e);
     }
 
     //! Ranged-for loops with enumeration
-    template<class CounterT, class C>
-    auto enumerate_with(C&& c) -> Enumerate<decltype(begin(std::forward<C>(c))), CounterT>
+    template<class CounterT, class CONTAINER>
+    auto enumerate_with(CONTAINER&& c)
     {
-      return {begin(std::forward<C>(c)), end(std::forward<C>(c))};
+        using namespace std;
+        auto b = begin(std::forward<CONTAINER>(c));
+        auto e = end(std::forward<CONTAINER>(c));
+        using IterT = decltype(b);
+        using IterOrSentinelT = decltype(e);
+        return Enumerate<IterT, IterOrSentinelT, CounterT>(b, e);
     }
 
     //! Ranged-for loops with enumeration
     template<class CONTAINER>
-    auto cenumerate(CONTAINER const &x) -> Enumerate<decltype(begin(x))>
+    auto cenumerate(CONTAINER const& c)
     {
-      return {begin(x), end(x)};
+        using namespace std;
+        auto b = begin(c);
+        auto e = end(c);
+        using IterT = decltype(b);
+        using IterOrSentinelT = decltype(e);
+        return Enumerate<IterT, IterOrSentinelT>(b, e);
     }
 
     //! For-ranged loop over several containers in parallel

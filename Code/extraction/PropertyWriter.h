@@ -10,10 +10,8 @@
 #include "extraction/PropertyOutputFile.h"
 #include "net/mpi.h"
 
-namespace hemelb
+namespace hemelb::extraction
 {
-  namespace extraction
-  {
     class PropertyWriter
     {
       public:
@@ -22,15 +20,9 @@ namespace hemelb
          * @param propertyOutputs
          * @return
          */
-        PropertyWriter(IterableDataSource& dataSource,
+        PropertyWriter(std::shared_ptr<IterableDataSource> dataSource,
                        const std::vector<PropertyOutputFile>& propertyOutputs,
-                       const net::IOCommunicator& ioComms);
-
-        /**
-         * Destructor; deallocates memory used to store property info.
-         * @return
-         */
-        ~PropertyWriter();
+                       net::IOCommunicator const& ioComms);
 
         /**
          * Writes each of the property output files, if appropriate for the passed iteration number.
@@ -38,21 +30,20 @@ namespace hemelb
          * An iterationNumber of 0 will write all files.
          * @param iterationNumber
          */
-        void Write(unsigned long iterationNumber, unsigned long totalSteps) const;
+        void Write(unsigned long iterationNumber, unsigned long totalSteps);
 
         /**
          * Returns a vector of all the LocalPropertyOutputs.
          * @return
          */
-        const std::vector<LocalPropertyOutput*>& GetPropertyOutputs() const;
+        const std::vector<LocalPropertyOutput>& GetPropertyOutputs() const;
 
       private:
         /**
          * Holds sufficient information to output property information from this core.
          */
-        std::vector<LocalPropertyOutput*> localPropertyOutputs;
+        std::vector<LocalPropertyOutput> localPropertyOutputs;
     };
-  }
 }
 
 #endif /* HEMELB_EXTRACTION_PROPERTYWRITER_H */

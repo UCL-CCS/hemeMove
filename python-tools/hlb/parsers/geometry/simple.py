@@ -11,6 +11,7 @@ from xml.etree import ElementTree
 import numpy as np
 
 from ...utils import xdr
+from ...utils.xml_compare import val_to_float, val_to_vec3
 from .generic import Domain, Block, AllSolidBlock, Site
 from .. import HemeLbMagicNumber
 from . import GeometryMagicNumber, sniff_gmy
@@ -71,13 +72,11 @@ class ConfigLoader(object):
             # Now the voxel size
             vsEl = root.find("simulation/voxel_size")
             assert vsEl.get("units") == "m", "voxel_size units not 'm'"
-            voxel = float(vsEl.get("value"))
+            voxel = val_to_float(vsEl.get("value"))
             # and origin
             oEl = root.find("simulation/origin")
             assert oEl.get("units") == "m", "origin units not 'm'"
-            oStr = oEl.get("value")
-            assert oStr[0] == "(" and oStr[-1] == ")"
-            origin = np.array(oStr[1:-1].split(","), dtype=float)
+            origin = val_to_vec3(oEl.get("value"))
             assert origin.shape == (3,)
 
         # Set up the domain

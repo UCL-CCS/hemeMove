@@ -54,11 +54,11 @@ set(generation_dir HlbGmyTool/Model/Generation)
 set(hemelb_cpps
   util/Vector3D.cc
   geometry/SiteDataBare.cc
-  io/formats/geometry.cc
   io/writers/XdrFileWriter.cc
   io/writers/XdrMemWriter.cc
   io/writers/XdrWriter.cc
   io/writers/Writer.cc
+  io/FILE.cc
 )
 list(TRANSFORM hemelb_cpps PREPEND "${HEMELB_CODE_DIR}/")
 # While this is located in the extension source tree, in spirit it is

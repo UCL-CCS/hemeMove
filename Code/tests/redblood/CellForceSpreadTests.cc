@@ -44,7 +44,7 @@ namespace hemelb::tests
 
       LatticeForceVector force_at_center(LatticePosition const &position)
       {
-        mesh += position - mesh.GetBarycenter();
+        mesh += position - mesh.GetBarycentre();
         helpers::ZeroOutForces(*latDat);
         details::spreadForce2Grid<details::SpreadForces, STENCIL>(std::shared_ptr<CellBase>(&mesh,
                                                                                             [](CellBase*)

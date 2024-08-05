@@ -14,7 +14,7 @@
 #include "lb/HFunction.h"
 #include "lb/LbmParameters.h"
 #include "geometry/Domain.h"
-#include "util/utilityFunctions.h"
+#include "util/numerical.h"
 
 namespace hemelb::lb
 {
@@ -78,7 +78,7 @@ namespace hemelb::lb
               // Papers suggest f_eq - f < 0.001 or (f_eq - f)/f < 0.01 for the point to have approx alpha = 2
               // Accuracy can change depending on stability requirements, because the more NR evaluations it skips
               // the more of the simulation is in the LBGK limit.
-              deviation = util::NumericalFunctions::max(fabs( (hydroVars.f_eq[i] - hydroVars.f[i])
+              deviation = std::max(fabs( (hydroVars.f_eq[i] - hydroVars.f[i])
                                                             / hydroVars.f[i]),
                                                         deviation);
               if (deviation > 1.0E-2)
@@ -98,7 +98,7 @@ namespace hemelb::lb
                 2.0 :
                 prevAlpha);
 
-              return (util::NumericalMethods::NewtonRaphson(&HFunc, prevAlpha, 1.0E-6));
+              return (util::NewtonRaphson(HFunc, prevAlpha, 1.0E-6));
             }
             else
             {
@@ -128,13 +128,13 @@ namespace hemelb::lb
                 return 2.0;
               }
 
-              return (util::NumericalMethods::Brent(&HFunc,
-                                                            alphaLower,
-                                                            HLower,
-                                                            alphaHigher,
-                                                            HHigher,
-                                                            1.0E-6,
-                                                            1.0E-12));
+              return util::Brent(HFunc,
+                                 alphaLower,
+                                 HLower,
+                                 alphaHigher,
+                                 HHigher,
+                                 1.0E-6,
+                                 1.0E-12);
             }
 
         }

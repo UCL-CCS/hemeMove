@@ -65,7 +65,7 @@ void BlockWriter::Finish() {
     //		// Compute upper bound for how much space we'll need.
     //		int maxDeflatedLength = deflateBound(&stream,
     //				this->UncompressedBlockLength);
-    char* compressedBuffer = this->bufferPool->New();
+    auto compressedBuffer = this->bufferPool->New();
 
     // Set input. The XDR buffer has to be char but zlib only works with
     // unsigned char. Just cast for now...
@@ -82,7 +82,7 @@ void BlockWriter::Finish() {
 
     // How much space did we actually use?
     this->CompressedBlockLength =
-        reinterpret_cast<char*>(stream.next_out) - compressedBuffer;
+        reinterpret_cast<std::byte*>(stream.next_out) - compressedBuffer;
 
     // Tell zlib to clean up.
     ret = deflateEnd(&stream);

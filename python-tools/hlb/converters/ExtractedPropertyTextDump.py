@@ -13,13 +13,14 @@ def unpack(filename, stream=sys.stdout):
     print('# Dump of file "{}"'.format(filename), file=stream)
     print("# File has {} sites.".format(propFile.siteCount), file=stream)
     print("# File has {} fields:".format(propFile.fieldCount), file=stream)
-    for name, xdrType, memType, length, offset in propFile._fieldSpec:
+    for name, xdrType, memType, length, offset, d_off, scale in propFile._fieldSpec:
         print('#     "{0}", length {1}'.format(name, length), file=stream)
     print("# Geometry origin = {} m".format(propFile.originMetres), file=stream)
     print("# Voxel size = {} m".format(propFile.voxelSizeMetres), file=stream)
 
     header = "# " + ", ".join(
-        name for name, xdrType, memType, length, offset in propFile._fieldSpec
+        name
+        for name, xdrType, memType, length, offset, d_off, scale in propFile._fieldSpec
     )
     print(header, file=stream)
 
@@ -31,7 +32,7 @@ def unpack(filename, stream=sys.stdout):
             print(
                 ", ".join(
                     str(getattr(row, name))
-                    for name, xdrType, memType, length, offset in propFile._fieldSpec
+                    for name, xdrType, memType, length, offset, d_off, scale in propFile._fieldSpec
                 ),
                 file=stream,
             )

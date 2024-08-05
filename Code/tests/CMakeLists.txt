@@ -42,11 +42,8 @@ add_to_resources(resources/four_cube.gmy resources/four_cube.xml resources/four_
   resources/large_cylinder.gmy resources/large_cylinder.xml
 )
 
-if (HEMELB_BUILD_MULTISCALE)
-  add_to_resources(multiscale/mpwide/MPWSettings.cfg)
-endif()
 
-add_test_executable(hemelb-tests main.cc SimulationMasterTests.cc)
+add_test_executable(hemelb-tests main.cc SimulationControllerTests.cc)
 
 add_subdirectory(helpers)
 
@@ -60,10 +57,14 @@ add_to_tests(extraction)
 add_to_tests(geometry)
 add_to_tests(io)
 add_to_tests(lb)
-add_to_tests(multiscale)
 add_to_tests(net)
 add_to_tests(reporting)
 add_to_tests(util)
+
+if (HEMELB_BUILD_MULTISCALE)
+  add_to_resources(multiscale/mpwide/MPWSettings.cfg)
+  add_to_tests(multiscale)
+endif()
 
 if (HEMELB_BUILD_RBC)
   add_to_resources(

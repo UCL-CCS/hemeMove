@@ -97,7 +97,7 @@ namespace hemelb
      *  refer to Example 4.17 on pp114-117 of the MPI specification version 2.2
      *  when you no longer need this type, remember to call MPI_Type_free
      */
-    const MPI_Datatype Particle::CreateMpiDatatypeWithPosition() const
+    MPI_Datatype Particle::CreateMpiDatatypeWithPosition() const
     {
       // MPI_Get_address specifies non-const pointers
       // so need a non-const copy of a particle object
@@ -177,7 +177,7 @@ namespace hemelb
      *  refer to Example 4.17 on pp114-117 of the MPI specification version 2.2
      *  when you no longer need this type, remember to call MPI_Type_free
      */
-    const MPI_Datatype Particle::CreateMpiDatatypeWithVelocity() const
+    MPI_Datatype Particle::CreateMpiDatatypeWithVelocity() const
     {
       // MPI_Get_address specifies non-const pointers
       // so need a non-const copy of a particle object

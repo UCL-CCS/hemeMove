@@ -11,6 +11,7 @@
 #include "util/span.h"
 #include "redblood/parallel/NodeCharacterizer.h"
 #include "configuration/CommandLine.h"
+#include "configuration/SimBuilder.h"
 #include "tests/redblood/Fixtures.h"
 #include "tests/helpers/LatticeDataAccess.h"
 #include "tests/helpers/FolderTestFixture.h"
@@ -20,36 +21,17 @@ namespace hemelb::tests
 {
     using namespace redblood;
     //! Parallel and Sequential move in lock step
-    class ParallelFixtureTests : public helpers::FolderTestFixture
+    class ParallelFixtureTests : public OpenSimFixture
     {
     public:
         ParallelFixtureTests();
 
         //! if owner procs thinks position affects proc i, then proc i knows it as well
         void testTransitiveOwnership();
-    protected:
-        std::shared_ptr<configuration::CommandLine> options;
-
-        //! Meta-function to create simulation type
-        template<class STENCIL>
-        using MasterSim = OpenedSimulationMaster<
-                Traits<
-                        lb::DefaultLattice, lb::GuoForcingLBGK, lb::Normal,
-                        lb::DefaultStreamer, lb::DefaultWallStreamer, lb::DefaultInletStreamer, lb::DefaultOutletStreamer,
-                        STENCIL
-                >
-        >;
-
-        //! Creates a master simulation
-        template<class STENCIL>
-        auto CreateMasterSim(net::IOCommunicator const &comm) const
-        {
-            return std::make_shared<MasterSim<STENCIL>>(*options, comm);
-        }
     };
 
 
-    ParallelFixtureTests::ParallelFixtureTests() : FolderTestFixture()
+    ParallelFixtureTests::ParallelFixtureTests() : OpenSimFixture()
     {
       // Have everything ready to create simulations
       if (Comms().Rank() == 0)
@@ -79,10 +61,10 @@ namespace hemelb::tests
           return;
         }
 
-      auto master = CreateMasterSim<Stencil>(world);
-      REQUIRE(master);
+      auto sim = CreateSim<Stencil>(world);
+      REQUIRE(sim);
 
-      auto& fd = master->GetFieldData();
+      auto& fd = sim->GetFieldData();
       auto& dom = fd.GetDomain();
       helpers::ZeroOutForces(fd);
       auto const nmid = 20;
@@ -92,7 +74,7 @@ namespace hemelb::tests
       auto graphComm =
 	world.DistGraphAdjacent(parallel::ComputeProcessorNeighbourhood(world,
                                                                           dom,
-									      2e-6 / master->GetSimConfig()->GetVoxelSize()));
+									      2e-6 / sim->GetSimConfig().GetVoxelSize()));
 
       auto const& globalCoordsToProcMap = parallel::ComputeGlobalCoordsToProcMap(graphComm, dom);
 

@@ -8,6 +8,7 @@ from ..Util.Observer import Observable
 
 class Vector(Observable):
     _Args = {"x": float("nan"), "y": float("nan"), "z": float("nan")}
+    _FORMAT_STRING = "({0.x},{0.y},{0.z})"
 
     def __init__(self, *args):
         if len(args) == 0:
@@ -25,9 +26,7 @@ class Vector(Observable):
         return
 
     def __repr__(self):
-        return "Vector({0.x}, {0.y}, {0.z})".format(self)
+        return "Vector" + str(self)
 
     def __str__(self):
-        return "({0.x},{0.y},{0.z})".format(self)
-
-    pass
+        return self._FORMAT_STRING.format(self)

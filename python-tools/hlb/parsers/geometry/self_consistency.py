@@ -205,7 +205,6 @@ class CheckingLoader(AsyncBlockProcessingLoader):
                 self.BlockDataLength[bIjk] == 0
                 and self.Domain.BlockFluidSiteCounts[bIjk] != 0
             ):
-
                 self.PrintError(
                     BlockError(
                         self.Domain.GetBlock(bIdx),

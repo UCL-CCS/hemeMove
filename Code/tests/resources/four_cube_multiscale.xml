@@ -1,9 +1,8 @@
 <?xml version="1.0" ?>
-<hemelbsettings version="5">
+<hemelbsettings version="6">
   <simulation>
     <steps value="100" units="lattice" />
     <step_length value="0.2" units="s" />
-    <stresstype value="1" />
     <voxel_size value="0.01" units="m" />
     <origin value="(0.0,0.0,0.0)" units="m" />
   </simulation>
@@ -12,14 +11,14 @@
   </geometry>
   <initialconditions>
     <pressure>
-      <uniform value="0.0" units="mmHg"/>
+      <uniform value="0.0" units="Pa"/>
     </pressure>
   </initialconditions>  
   <inlets>
     <inlet>
       <condition type="pressure" subtype="multiscale">
         <label value="boundary1" />
-        <pressure value="1.0" units="mmHg" />
+        <pressure value="1.0" units="Pa" />
         <velocity value="(0.0,0.0,0.1)" units="m/s" />
       </condition>
       <normal value="(0.0,0.0,1.0)" units="dimensionless" />
@@ -30,25 +29,13 @@
     <outlet>
       <condition type="pressure" subtype="multiscale">
         <label value="boundary2" />
-        <pressure value="-1.0" units="mmHg" />
+        <pressure value="-1.0" units="Pa" />
         <velocity value="(0.0,0.0,0.1)" units="m/s" />
       </condition>
       <normal value="(0.0,0.0,-1.0)" units="dimensionless" />
       <position value="(0.0,0.0,0.05)" units="m" />
     </outlet>
   </outlets>
-  <visualisation>
-    <centre value="(0.0,0.0,0.0)" units="m" />
-    <orientation>
-      <latitude value="45.0" units="deg" />
-      <longitude value="45.0" units="deg" />
-    </orientation>
-    <display brightness="0.03" zoom="1.0" />
-    <range>
-      <maxstress value="0.1" units="Pa" />
-      <maxvelocity value="0.1" units="m/s" />
-    </range>
-  </visualisation>
   <properties>
     <propertyoutput period="2" file="wholegeometryvelocityandstress.dat">
       <geometry type="whole" />

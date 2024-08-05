@@ -5,7 +5,7 @@
 
 #include "geometry/needs/Needs.h"
 #include "log/Logger.h"
-#include "util/utilityFunctions.h"
+#include "util/numerical.h"
 
 namespace hemelb
 {

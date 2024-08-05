@@ -14,12 +14,12 @@ namespace hemelb::redblood::buffer
         LatticeDistance maxExtension(MeshData::Vertices const &vertices,
                                      LatticePosition const &direction)
         {
-          auto const barycenter = redblood::barycenter(vertices);
+          auto const barycentre = redblood::barycentre(vertices);
           LatticeDistance result(0);
           auto const normalised = direction.GetNormalised();
-          auto maxdist = [&normalised, &result, &barycenter](LatticePosition const &b)
+          auto maxdist = [&normalised, &result, &barycentre](LatticePosition const &b)
           {
-            result = std::max(result, std::abs(Dot(normalised, b - barycenter)));
+            result = std::max(result, std::abs(Dot(normalised, b - barycentre)));
           };
           std::for_each(vertices.begin(), vertices.end(), maxdist);
           return 2e0 * result;
@@ -116,7 +116,7 @@ namespace hemelb::redblood::buffer
         // Cell is rotated to correct orientation
         *templateCell *= rotationMatrix(cellAxis, colAxis);
         // And centered at zero
-        *templateCell -= templateCell->GetBarycenter();
+        *templateCell -= templateCell->GetBarycentre();
       }
 
       CellContainer::value_type ColumnCellDrop::operator()()

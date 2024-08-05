@@ -4,10 +4,9 @@
 // license in the file LICENSE.
 
 #include <catch2/catch.hpp>
-#include <tinyxml.h>
 
+#include "configuration/SimConfigReader.h"
 #include "io/xml.h"
-#include "redblood/FlowExtension.h"
 #include "redblood/RBCInserter.h"
 #include "tests/redblood/Fixtures.h"
 #include "tests/helpers/FolderTestFixture.h"
@@ -17,6 +16,7 @@
 
 namespace hemelb::tests
 {
+    using namespace io::xml;
     using namespace redblood;
 
     TEST_CASE_METHOD(FlowExtensionFixture, "CellInserterTests", "[redblood]") {
@@ -25,37 +25,38 @@ namespace hemelb::tests
         TemplateCellContainer cells;
         cells.emplace("joe", std::make_shared<Cell>(tetrahedron()));
 
-        auto getDocument = [&](LatticeDistance radius = 1e0, int numInserters = 0) -> TiXmlDocument {
+        auto getDocument = [&](LatticeDistance radius = 1e0, int numInserters = 0) {
             std::ostringstream sstr;
-            sstr << "<hemelbsettings>"
-                    "<inlets><inlet>"
-                    "  <condition type=\"pressure\" subtype=\"file\">"
-                    "  <path value=\"ignored.dat\" />"
-                    "  </condition>"
-                    "  <normal units=\"dimensionless\" value=\"(0.0,1.0,1.0)\" />"
-                    "  <position units=\"m\" value=\"(0.1,0.2,0.3)\" />"
-                    "  <flowextension>"
-                    "    <length units=\"m\" value=\"0.5\" />"
-                    "    <radius units=\"m\" value=\"" << radius << "\" />"
-                                                                    "    <fadelength units=\"m\" value=\"0.4\" />"
-                                                                    "  </flowextension>";
+            sstr << "<hemelbsettings>\n<inlets>\n<inlet>\n"
+                    "  <condition type=\"pressure\" subtype=\"file\">\n"
+                    "  <path value=\"ignored.dat\" />\n"
+                    "  </condition>\n"
+                    "  <normal units=\"dimensionless\" value=\"(0.0,1.0,1.0)\" />\n"
+                    "  <position units=\"m\" value=\"(0.1,0.2,0.3)\" />\n"
+                    "  <flowextension>\n"
+                    "    <length units=\"m\" value=\"0.5\" />\n"
+                    "    <radius units=\"m\" value=\"" << radius << "\" />\n"
+                    "    <fadelength units=\"m\" value=\"0.4\" />\n"
+                    "  </flowextension>\n";
             for (int i = 0; i < numInserters; ++i)
             {
-                sstr << "  <insertcell template=\"joe\">"
-                        "    <every units=\"s\" value=\"" << every << "\"/>"
-                                                                      "    <offset units=\"s\" value=\"" << offset << "\"/>"
-                                                                                                                      "  </insertcell>";
+                sstr << "  <insertcell template=\"joe\">\n"
+                     << "    <every units=\"s\" value=\"" << every << "\"/>\n"
+                     << "    <offset units=\"s\" value=\"" << offset << "\"/>\n"
+                     << "    <seed value=\"854" << i << "\" />\n"
+                     << "  </insertcell>\n";
             }
-            sstr << "</inlet></inlets>"
-                    "</hemelbsettings>";
-            TiXmlDocument doc;
-            doc.Parse(sstr.str().c_str());
+            sstr << "</inlet>\n</inlets>\n</hemelbsettings>\n";
+            Document doc;
+            doc.LoadString(sstr.str().c_str());
             return doc;
         };
 
         auto readRBCInserters = [&](io::xml::Element const& inletsNode, TemplateCellContainer const& templateCells) {
-            UninitSimConfig conf("ignored.xml");
-            auto inlet_confs = conf.DoIOForInOutlets(inletsNode);
+            using namespace configuration;
+            SimConfig conf;
+            SimConfigReader reader("ignored.xml");
+            auto inlet_confs = reader.DoIOForInOutlets(conf.GetSimInfo(), inletsNode);
             auto builder = UninitSimBuilder(conf, converter);
             auto inlets = builder.BuildIolets(inlet_confs);
 
@@ -66,25 +67,25 @@ namespace hemelb::tests
         SECTION("testNoPeriodicInsertion") {
             auto doc = getDocument(1e0, 0);
             *cells["joe"] *= 0.1e0;
-            auto const inserter = readRBCInserters(doc.FirstChildElement("hemelbsettings")->FirstChildElement("inlets"),
+            auto const inserter = readRBCInserters(doc.GetRoot().GetChildOrThrow("inlets"),
                                                    cells);
             REQUIRE(not inserter);
         }
 
-      SECTION("testCellOutsideFlowExtension") {
-	auto doc = getDocument(1e0, 1);
-	REQUIRE_THROWS_AS(readRBCInserters(doc.FirstChildElement("hemelbsettings")->FirstChildElement("inlets"),
-					      cells),
-			  hemelb::Exception);
-      }
+        SECTION("testCellOutsideFlowExtension") {
+            auto doc = getDocument(1e0, 1);
+            REQUIRE_THROWS_AS(readRBCInserters(doc.GetRoot().GetChildOrThrow("inlets"),
+                                               cells),
+                              hemelb::Exception);
+        }
 
-      SECTION("testPeriodicInsertion") {
-	// Creates an inserter and checks it exists
-	auto doc = getDocument(1, 2);
-	*cells["joe"] *= 0.1e0;
-	auto const inserter = readRBCInserters(doc.FirstChildElement("hemelbsettings")->FirstChildElement("inlets"),
-					       cells);
-	REQUIRE(inserter);
+        SECTION("testPeriodicInsertion") {
+            // Creates an inserter and checks it exists
+            auto doc = getDocument(1, 2);
+            *cells["joe"] *= 0.1e0;
+            auto const inserter = readRBCInserters(doc.GetRoot().GetChildOrThrow("inlets"),
+                                                   cells);
+            REQUIRE(inserter);
 
 	// all calls up to offset result in node added cell
 	int num_calls = 0;
@@ -118,7 +119,7 @@ namespace hemelb::tests
 	  REQUIRE(2 == num_calls);
 	  num_calls = 0;
 	}
-      }
+        }
 
       SECTION("testTranslation") {
 	auto const identity = rotationMatrix(LatticePosition(0, 0, 1),
@@ -130,13 +131,13 @@ namespace hemelb::tests
 													0),
 					     LatticePosition(0, 4, 0));
 
-	auto const barycenter = cells["joe"]->GetBarycenter();
+	auto const barycentre = cells["joe"]->GetBarycentre();
 	for (size_t i(0); i < 500; ++i) {
 	  auto const cell = inserter.drop();
-	  auto const n = cell->GetBarycenter();
-	  REQUIRE(std::abs(n.x() - barycenter.x()) <= 2e0);
-	  REQUIRE(std::abs(n.y() - barycenter.y()) <= 4e0);
-	  REQUIRE(Approx(barycenter.z()).margin(1e-8) == n.z());
+	  auto const n = cell->GetBarycentre();
+	  REQUIRE(std::abs(n.x() - barycentre.x()) <= 2e0);
+	  REQUIRE(std::abs(n.y() - barycentre.y()) <= 4e0);
+	  REQUIRE(Approx(barycentre.z()).margin(1e-8) == n.z());
 	}
       }
 
@@ -153,8 +154,10 @@ namespace hemelb::tests
 	auto addCell = [&current_cell](CellContainer::value_type const& cell) {
 	  current_cell = cell;
 	};
-	auto const inserter = readRBCInserters(doc.FirstChildElement("hemelbsettings")->FirstChildElement("inlets"),
-					       cells);
+    // Have to copy as doc is consumed by reading
+    auto doc1 = doc.DeepCopy();
+	auto const inserter = readRBCInserters(doc1.GetRoot().GetChildOrThrow("inlets"),
+                                           cells);
 	REQUIRE(inserter);
 	inserter(addCell);
 	REQUIRE(current_cell);
@@ -164,24 +167,25 @@ namespace hemelb::tests
 	helpers::ModifyXMLInput(doc, { "inlets", "inlet", "insertcell", "x", "value" }, 0.1);
 	helpers::ModifyXMLInput(doc, { "inlets", "inlet", "insertcell", "y", "units" }, "m");
 	helpers::ModifyXMLInput(doc, { "inlets", "inlet", "insertcell", "y", "value" }, 0.1);
-	auto const insertTranslated = readRBCInserters(doc.FirstChildElement("hemelbsettings")->FirstChildElement("inlets"),
-						       cells);
+    auto doc2 = doc.DeepCopy();
+	auto const insertTranslated = readRBCInserters(doc2.GetRoot().GetChildOrThrow("inlets"),
+                                                   cells);
 	REQUIRE(insertTranslated);
 	insertTranslated(addCell);
 	REQUIRE(current_cell);
-	auto const trans = cell0->GetBarycenter() - current_cell->GetBarycenter();
+	auto const trans = cell0->GetBarycentre() - current_cell->GetBarycentre();
 	auto approx = Approx(0.0).margin(1e-8);
 	REQUIRE(approx(0) == Dot(trans, util::Vector3D{0, 1, 1}));
 	REQUIRE(approx(0.1 / 0.6 * 0.1 / 0.6 * 2e0) == trans.GetMagnitudeSquared());
 
 	helpers::ModifyXMLInput(doc, { "inlets", "inlet", "insertcell", "z", "units" }, "m");
 	helpers::ModifyXMLInput(doc, { "inlets", "inlet", "insertcell", "z", "value" }, 0.1);
-	auto const insertWithZ = readRBCInserters(doc.FirstChildElement("hemelbsettings")->FirstChildElement("inlets"),
-						  cells);
+	auto const insertWithZ = readRBCInserters(doc.GetRoot().GetChildOrThrow("inlets"),
+                                              cells);
 	REQUIRE(insertWithZ);
 	insertWithZ(addCell);
 	REQUIRE(current_cell);
-	auto const transZ = cell0->GetBarycenter() - current_cell->GetBarycenter();
+	auto const transZ = cell0->GetBarycentre() - current_cell->GetBarycentre();
 	REQUIRE(approx(0.1 / 0.6 * std::sqrt(2)) == Dot(transZ, util::Vector3D{0, 1, 1}));
 	REQUIRE(approx(0.1 / 0.6 * 0.1 / 0.6 * 3e0) == transZ.GetMagnitudeSquared());
       }

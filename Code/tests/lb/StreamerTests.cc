@@ -220,117 +220,101 @@ namespace hemelb::tests
 	}
       }
 
-      SECTION("TestSimpleBounceBack") {
-    using SBB = StreamerTypeFactory<BounceBackLink<COLLISION>, NullLink<COLLISION>>;
-	// Initialise fOld in the lattice data. We choose values so
-	// that each site has an anisotropic distribution function,
-	// and that each site's function is distinguishable.
-	LbTestsHelper::InitialiseAnisotropicTestData<LATTICE>(*latDat);
+        SECTION("TestSimpleBounceBack") {
+            using SBB = StreamerTypeFactory<BounceBackLink<COLLISION>, NullLink<COLLISION>>;
+            // Initialise fOld in the lattice data. We choose values so
+            // that each site has an anisotropic distribution function,
+            // and that each site's function is distinguishable.
+            LbTestsHelper::InitialiseAnisotropicTestData<LATTICE>(*latDat);
 
-	site_t firstWallSite = dom->GetMidDomainCollisionCount(0);
-	site_t wallSitesCount = dom->GetMidDomainCollisionCount(1);
+            auto [firstWallSite, pastLastWallSite] = dom->GetMidDomainSiteRange(1);
+            auto wallSitesCount = pastLastWallSite - firstWallSite;
 
-	// Check that the lattice has the expected number of sites
-	// labeled as pure wall (otherwise this test is void)
-	REQUIRE(site_t(24) == dom->GetMidDomainCollisionCount(1));
+            // Check that the lattice has the expected number of sites
+            // labeled as pure wall (otherwise this test is void)
+            REQUIRE(site_t(24) == wallSitesCount);
 
-	site_t offset = 0;
+            // Mid-Fluid sites use simple collide and stream
+            BulkStreamer<COLLISION > simpleCollideAndStream(initParams);
+            auto [beginBulk, pastLastBulk] = dom->GetMidDomainSiteRange(0);
+            simpleCollideAndStream.StreamAndCollide(
+                    beginBulk, pastLastBulk, &lbmParams, *latDat, *propertyCache
+            );
 
-	// Mid-Fluid sites use simple collide and stream
-	BulkStreamer<COLLISION > simpleCollideAndStream(initParams);
+            // Wall sites use simple bounce back
+            SBB simpleBounceBack(initParams);
 
-	simpleCollideAndStream.StreamAndCollide(offset,
-							dom->GetMidDomainCollisionCount(0),
-							&lbmParams,
-							*latDat,
-							*propertyCache);
-	offset += dom->GetMidDomainCollisionCount(0);
+            simpleBounceBack.StreamAndCollide(
+                    firstWallSite, pastLastWallSite, &lbmParams, *latDat, *propertyCache
+            );
 
-	// Wall sites use simple bounce back
-	SBB simpleBounceBack(initParams);
+            // Consider inlet/outlets and their walls as mid-fluid sites
+            simpleCollideAndStream.StreamAndCollide(
+                    pastLastWallSite,dom->GetLocalFluidSiteCount(),
+                    &lbmParams, *latDat, *propertyCache
+            );
 
-	simpleBounceBack.StreamAndCollide(offset,
-						  dom->GetMidDomainCollisionCount(1),
-						  &lbmParams,
-						  *latDat,
-						  *propertyCache);
-	offset += dom->GetMidDomainCollisionCount(1);
+            // Loop over the wall sites and check whether they got
+            // properly streamed on or bounced back depending on where
+            // they sit relative to the wall. We ignore mid-Fluid sites
+            // since StreamAndCollide was tested before.
+            for (site_t i_site = firstWallSite; i_site < pastLastWallSite; ++i_site) {
+                const auto streamedSite = latDat->GetSite(i_site);
+                distribn_t* streamedToFNew = latDat->GetFNew(NUMVECTORS * i_site);
 
-	// Consider inlet/outlets and their walls as mid-fluid sites
-	simpleCollideAndStream.StreamAndCollide(offset,
-							dom->GetLocalFluidSiteCount()
-							- offset,
-							&lbmParams,
-							*latDat,
-							*propertyCache);
-	offset += dom->GetLocalFluidSiteCount() - offset;
+                for (unsigned i = 0; i < NUMVECTORS; ++i) {
+                    unsigned oppDirection = LATTICE::INVERSEDIRECTIONS[i];
 
-	// Sanity check
-	REQUIRE(offset == dom->GetLocalFluidSiteCount());
+                    // Index of the site streaming to i_site via direction i
+                    site_t streamerIndex = streamedSite.GetStreamedIndex<LATTICE> (oppDirection);
 
-	// Loop over the wall sites and check whether they got
-	// properly streamed on or bounced back depending on where
-	// they sit relative to the wall. We ignore mid-Fluid sites
-	// since StreamAndCollide was tested before.
-	for (site_t wallSiteLocalIndex = 0; wallSiteLocalIndex < wallSitesCount; wallSiteLocalIndex++) {
-	  site_t streamedToSite = firstWallSite + wallSiteLocalIndex;
-	  const auto streamedSite = latDat->GetSite(streamedToSite);
-	  distribn_t* streamedToFNew = latDat->GetFNew(NUMVECTORS * streamedToSite);
+                    // Is streamerIndex a valid index?
+                    if (streamerIndex >= 0 && streamerIndex < (NUMVECTORS * dom->GetLocalFluidSiteCount())) {
+                        // The streamer index is a valid index in the domain,
+                        // therefore stream and collide has happened
+                        site_t streamerSiteId = streamerIndex / NUMVECTORS;
 
-	  for (unsigned int streamedDirection = 0; streamedDirection
-		 < NUMVECTORS; ++streamedDirection) {
-	    unsigned oppDirection = LATTICE::INVERSEDIRECTIONS[streamedDirection];
+                        // Calculate streamerFOld at this site.
+                        distribn_t streamerFOld[NUMVECTORS];
+                        LbTestsHelper::InitialiseAnisotropicTestData<LATTICE>(streamerSiteId,
+                                                                              streamerFOld);
 
-	    // Index of the site streaming to streamedToSite via direction streamedDirection
-	    site_t streamerIndex = streamedSite.GetStreamedIndex<LATTICE> (oppDirection);
+                        // Calculate what the value streamed to site i_site should be.
+                        lb::HydroVars<KERNEL> streamerHydroVars(streamerFOld);
+                        normalCollision->CalculatePreCollision(streamerHydroVars, streamedSite);
 
-	    // Is streamerIndex a valid index?
-	    if (streamerIndex >= 0 && streamerIndex < (NUMVECTORS * dom->GetLocalFluidSiteCount())) {
-	      // The streamer index is a valid index in the domain,
-	      // therefore stream and collide has happened
-	      site_t streamerSiteId = streamerIndex / NUMVECTORS;
+                        normalCollision->Collide(&lbmParams, streamerHydroVars);
 
-	      // Calculate streamerFOld at this site.
-	      distribn_t streamerFOld[NUMVECTORS];
-	      LbTestsHelper::InitialiseAnisotropicTestData<LATTICE>(streamerSiteId,
-								    streamerFOld);
+                        // F_new should be equal to the value that was streamed
+                        // from this other site
+                        // in the same direction as we're streaming from.
+                        INFO("BulkStreamer, StreamAndCollide");
+                        REQUIRE(apprx(streamerHydroVars.GetFPostCollision()[i]) == streamedToFNew[i]);
+                    } else {
+                        // The streamer index shows that no one has streamed to
+                        // i_site direction i, therefore
+                        // bounce back has happened in that site for that
+                        // direction
 
-	      // Calculate what the value streamed to site streamedToSite should be.
-	      lb::HydroVars<KERNEL> streamerHydroVars(streamerFOld);
-	      normalCollision->CalculatePreCollision(streamerHydroVars, streamedSite);
+                        // Initialise streamedToSiteFOld with the original data
+                        distribn_t streamerToSiteFOld[NUMVECTORS];
+                        LbTestsHelper::InitialiseAnisotropicTestData<LATTICE>(i_site,
+                                                                              streamerToSiteFOld);
+                        lb::HydroVars<KERNEL> hydroVars(streamerToSiteFOld);
+                        normalCollision->CalculatePreCollision(hydroVars, streamedSite);
 
-	      normalCollision->Collide(&lbmParams, streamerHydroVars);
+                        // Simulate post-collision using the collision operator.
+                        normalCollision->Collide(&lbmParams, hydroVars);
 
-	      // F_new should be equal to the value that was streamed
-	      // from this other site
-	      // in the same direction as we're streaming from.
-	      INFO("BulkStreamer, StreamAndCollide");
-	      REQUIRE(apprx(streamerHydroVars.GetFPostCollision()[streamedDirection]) == streamedToFNew[streamedDirection]);
-	    } else {
-	      // The streamer index shows that no one has streamed to
-	      // streamedToSite direction streamedDirection, therefore
-	      // bounce back has happened in that site for that
-	      // direction
-
-	      // Initialise streamedToSiteFOld with the original data
-	      distribn_t streamerToSiteFOld[NUMVECTORS];
-	      LbTestsHelper::InitialiseAnisotropicTestData<LATTICE>(streamedToSite,
-								    streamerToSiteFOld);
-	      lb::HydroVars<KERNEL> hydroVars(streamerToSiteFOld);
-	      normalCollision->CalculatePreCollision(hydroVars, streamedSite);
-
-	      // Simulate post-collision using the collision operator.
-	      normalCollision->Collide(&lbmParams, hydroVars);
-
-	      // After streaming FNew in a given direction must be f
-	      // post-collision in the opposite direction following
-	      // collision
-	      INFO("Simple bounce-back: site " << streamedToSite << " direction " << streamedDirection);
-	      REQUIRE(streamedToFNew[streamedDirection] == apprx(hydroVars.GetFPostCollision()[oppDirection]));
-	    }
-	  }
-	}
-      }
+                        // After streaming FNew in a given direction must be f
+                        // post-collision in the opposite direction following
+                        // collision
+                        INFO("Simple bounce-back: site " << i_site << " direction " << i);
+                        REQUIRE(streamedToFNew[i] == apprx(hydroVars.GetFPostCollision()[oppDirection]));
+                    }
+                }
+            }
+        }
 
       SECTION("GuoZhengShi") {
     using GZS = StreamerTypeFactory<GuoZhengShiLink<COLLISION>, NullLink<COLLISION>>;
@@ -496,132 +480,114 @@ namespace hemelb::tests
       // Junk&Yang should behave like simple bounce back when fluid
       // sites are 0.5 lattice length units away from the domain
       // boundary.
-      SECTION("JunkYangEquivalentToBounceBack") {
-	// Initialise fOld in the lattice data. We choose values so
-	// that each site has an anisotropic distribution function,
-	// and that each site's function is distinguishable.
-	LbTestsHelper::InitialiseAnisotropicTestData<LATTICE>(*latDat);
-	// Setting all the wall distances to 0.5 will make Junk&Yang
-	// behave like Simple Bounce Back
-	LbTestsHelper::SetWallAndIoletDistances<LATTICE>(*latDat, 0.5);
+        SECTION("JunkYangEquivalentToBounceBack") {
+            // Initialise fOld in the lattice data. We choose values so
+            // that each site has an anisotropic distribution function,
+            // and that each site's function is distinguishable.
+            LbTestsHelper::InitialiseAnisotropicTestData<LATTICE>(*latDat);
+            // Setting all the wall distances to 0.5 will make Junk&Yang
+            // behave like Simple Bounce Back
+            LbTestsHelper::SetWallAndIoletDistances<LATTICE>(*latDat, 0.5);
 
-	site_t firstWallSite = dom->GetMidDomainCollisionCount(0);
-	site_t wallSitesCount = dom->GetMidDomainCollisionCount(1) - firstWallSite;
+            auto [firstBulkSite, pastLastBulkSite] = dom->GetMidDomainSiteRange(0);
+            auto wallSiteRange = dom->GetMidDomainSiteRange(1);
+            auto wallSitesCount = wallSiteRange.second - wallSiteRange.first;
+            // Check that the lattice has sites labeled as wall (otherwise
+            // this test is void)
+            REQUIRE(wallSitesCount == 24);
 
-	// Check that the lattice has sites labeled as wall (otherwise
-	// this test is void)
-	REQUIRE(wallSitesCount == 16);
+            // Mid-Fluid sites use simple collide and stream
+            BulkStreamer<COLLISION> simpleCollideAndStream(initParams);
 
-	site_t offset = 0;
+            simpleCollideAndStream.StreamAndCollide(
+                    firstBulkSite, pastLastBulkSite,
+                    &lbmParams, *latDat, *propertyCache
+            );
 
-	// Mid-Fluid sites use simple collide and stream
-	BulkStreamer<COLLISION> simpleCollideAndStream(initParams);
+            // Wall sites use Junk and Yang
+            initParams.siteRanges = {wallSiteRange};
+            JunkYangFactory<NullLink<COLLISION>> junkYang(initParams);
 
-	simpleCollideAndStream.StreamAndCollide(offset,
-							dom->GetMidDomainCollisionCount(0),
-							&lbmParams,
-							*latDat,
-							*propertyCache);
-	offset += dom->GetMidDomainCollisionCount(0);
+            junkYang.StreamAndCollide(
+                    wallSiteRange.first, wallSiteRange.second,
+                    &lbmParams, *latDat, *propertyCache
+            );
 
-	// Wall sites use Junk and Yang
-	initParams.siteRanges.push_back(std::pair<site_t, site_t>(offset,
-								  offset
-								  + dom->GetMidDomainCollisionCount(1)));
-	JunkYangFactory<NullLink<COLLISION>> junkYang(initParams);
+            junkYang.PostStep(
+                    wallSiteRange.first, wallSiteRange.second,
+				  &lbmParams, *latDat, *propertyCache
+            );
 
-	junkYang.StreamAndCollide(offset,
-					  dom->GetMidDomainCollisionCount(1),
-					  &lbmParams,
-					  *latDat,
-					  *propertyCache);
+            // Consider inlet/outlets and their walls as mid-fluid sites
+            simpleCollideAndStream.StreamAndCollide(
+                    wallSiteRange.second, dom->GetLocalFluidSiteCount(),
+                    &lbmParams, *latDat, *propertyCache
+            );
 
-	junkYang.PostStep(offset,
-				  dom->GetMidDomainCollisionCount(1),
-				  &lbmParams,
-				  *latDat,
-				  *propertyCache);
+            // Loop over the wall sites and check whether they got
+            // properly streamed on or bounced back depending on where
+            // they sit relative to the wall. We ignore mid-Fluid sites
+            // since StreamAndCollide was tested before.
+            for (site_t iSite = wallSiteRange.first; iSite < wallSiteRange.second; ++iSite) {
+                const auto streamedSite = latDat->GetSite(iSite);
+                distribn_t* streamedToFNew = latDat->GetFNew(NUMVECTORS * iSite);
 
-	offset += dom->GetMidDomainCollisionCount(1);
+                for (unsigned int iDir = 0; iDir < NUMVECTORS; ++iDir) {
+                    unsigned oppDirection = LATTICE::INVERSEDIRECTIONS[iDir];
 
-	// Consider inlet/outlets and their walls as mid-fluid sites
-	simpleCollideAndStream.StreamAndCollide(offset,
-							dom->GetLocalFluidSiteCount()
-							- offset,
-							&lbmParams,
-							*latDat,
-							*propertyCache);
-	offset += dom->GetLocalFluidSiteCount() - offset;
+                    // Index of the site streaming to streamedToSite via
+                    // direction streamedDirection
+                    site_t streamerIndex = streamedSite.GetStreamedIndex<LATTICE> (oppDirection);
 
-	// Sanity check
-	REQUIRE(offset == dom->GetLocalFluidSiteCount());
+                    // Is streamerIndex a valid index?
+                    if (streamerIndex >= 0 &&
+                        streamerIndex < (NUMVECTORS * dom->GetLocalFluidSiteCount())) {
+                        // The streamer index is a valid index in the domain,
+                        // therefore stream and collide has happened
+                        site_t streamerSiteId = streamerIndex / NUMVECTORS;
 
-	// Loop over the wall sites and check whether they got
-	// properly streamed on or bounced back depending on where
-	// they sit relative to the wall. We ignore mid-Fluid sites
-	// since StreamAndCollide was tested before.
-	for (site_t wallSiteLocalIndex = 0; wallSiteLocalIndex < wallSitesCount; wallSiteLocalIndex++) {
-	  site_t streamedToSite = firstWallSite + wallSiteLocalIndex;
-	  const auto streamedSite = latDat->GetSite(streamedToSite);
-	  distribn_t* streamedToFNew = latDat->GetFNew(NUMVECTORS * streamedToSite);
+                        // Calculate streamerFOld at this site.
+                        distribn_t streamerFOld[NUMVECTORS];
+                        LbTestsHelper::InitialiseAnisotropicTestData<LATTICE>(streamerSiteId,
+                                                                              streamerFOld);
 
-	  for (unsigned int streamedDirection = 0;
-	       streamedDirection < NUMVECTORS; ++streamedDirection) {
-	    unsigned oppDirection = LATTICE::INVERSEDIRECTIONS[streamedDirection];
+                        // Calculate what the value streamed to site streamedToSite should be.
+                        lb::HydroVars<KERNEL> streamerHydroVars(streamerFOld);
+                        normalCollision->CalculatePreCollision(streamerHydroVars, streamedSite);
 
-	    // Index of the site streaming to streamedToSite via
-	    // direction streamedDirection
-	    site_t streamerIndex = streamedSite.GetStreamedIndex<LATTICE> (oppDirection);
+                        normalCollision->Collide(&lbmParams, streamerHydroVars);
 
-	    // Is streamerIndex a valid index?
-	    if (streamerIndex >= 0 &&
-		streamerIndex < (NUMVECTORS * dom->GetLocalFluidSiteCount())) {
-	      // The streamer index is a valid index in the domain,
-	      // therefore stream and collide has happened
-	      site_t streamerSiteId = streamerIndex / NUMVECTORS;
+                        // F_new should be equal to the value that was streamed
+                        // from this other site in the same direction as we're
+                        // streaming from.
+                        REQUIRE(apprx(streamerHydroVars.GetFPostCollision()[iDir])
+                                == streamedToFNew[iDir]);
+                    } else {
+                        // The streamer index shows that no one has streamed to
+                        // streamedToSite direction streamedDirection, therefore
+                        // bounce back has happened in that site for that
+                        // direction
 
-	      // Calculate streamerFOld at this site.
-	      distribn_t streamerFOld[NUMVECTORS];
-	      LbTestsHelper::InitialiseAnisotropicTestData<LATTICE>(streamerSiteId,
-								    streamerFOld);
+                        // Initialise streamedToSiteFOld with the original data
+                        distribn_t streamerToSiteFOld[NUMVECTORS];
+                        LbTestsHelper::InitialiseAnisotropicTestData<LATTICE>(iSite, streamerToSiteFOld);
+                        lb::HydroVars<KERNEL> hydroVars(streamerToSiteFOld);
+                        normalCollision->CalculatePreCollision(hydroVars, streamedSite);
 
-	      // Calculate what the value streamed to site streamedToSite should be.
-	      lb::HydroVars<KERNEL> streamerHydroVars(streamerFOld);
-	      normalCollision->CalculatePreCollision(streamerHydroVars, streamedSite);
+                        // Simulate post-collision using the collision operator.
+                        normalCollision->Collide(&lbmParams, hydroVars);
 
-	      normalCollision->Collide(&lbmParams, streamerHydroVars);
-
-	      // F_new should be equal to the value that was streamed
-	      // from this other site in the same direction as we're
-	      // streaming from.
-	      REQUIRE(apprx(streamerHydroVars.GetFPostCollision()[streamedDirection])
-		      == streamedToFNew[streamedDirection]);
-	    } else {
-	      // The streamer index shows that no one has streamed to
-	      // streamedToSite direction streamedDirection, therefore
-	      // bounce back has happened in that site for that
-	      // direction
-
-	      // Initialise streamedToSiteFOld with the original data
-	      distribn_t streamerToSiteFOld[NUMVECTORS];
-	      LbTestsHelper::InitialiseAnisotropicTestData<LATTICE>(streamedToSite, streamerToSiteFOld);
-	      lb::HydroVars<KERNEL> hydroVars(streamerToSiteFOld);
-	      normalCollision->CalculatePreCollision(hydroVars, streamedSite);
-
-	      // Simulate post-collision using the collision operator.
-	      normalCollision->Collide(&lbmParams, hydroVars);
-
-	      // After streaming FNew in a given direction must be f
-	      // post-collision in the opposite direction following
-	      // collision
-	      INFO("Junk&Yang bounce-back equivalent: site " << streamedToSite
-		   << " direction " << streamedDirection);
-	      REQUIRE(apprx(streamedToFNew[streamedDirection])
-		      == hydroVars.GetFPostCollision()[oppDirection]);
-	    }
-	  }
-	}
-      }
+                        // After streaming FNew in a given direction must be f
+                        // post-collision in the opposite direction following
+                        // collision
+                        INFO("Junk&Yang bounce-back equivalent: site " << iSite
+                                                                       << " direction " << iDir);
+                        REQUIRE(apprx(streamedToFNew[iDir])
+                                == hydroVars.GetFPostCollision()[oppDirection]);
+                    }
+                }
+            }
+        }
 
         SECTION("NashZerothOrderPressureIolet") {
             using N0P = StreamerTypeFactory<NullLink<COLLISION>, NashZerothOrderPressureLink<COLLISION>>;

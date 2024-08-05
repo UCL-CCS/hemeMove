@@ -8,29 +8,28 @@
 
 namespace hemelb::extraction
 {
-    PropertyActor::PropertyActor(const lb::SimulationState& simulationState,
+    PropertyActor::PropertyActor(std::shared_ptr<lb::SimulationState const> simState,
                                  const std::vector<PropertyOutputFile>& propertyOutputs,
-                                 IterableDataSource& dataSource, reporting::Timers& timers,
-                                 const net::IOCommunicator& ioComms) :
-        simulationState(simulationState), timers(timers)
+                                 std::shared_ptr<IterableDataSource> dataSource, reporting::Timers& timers,
+                                 net::IOCommunicator const& ioComms) :
+        simulationState(std::move(simState)), timers(timers)
     {
-      propertyWriter = std::make_unique<PropertyWriter>(dataSource, propertyOutputs, ioComms);
+      propertyWriter = std::make_unique<PropertyWriter>(std::move(dataSource), propertyOutputs, ioComms);
     }
 
     PropertyActor::~PropertyActor() = default;
 
     void PropertyActor::SetRequiredProperties(lb::MacroscopicPropertyCache& propertyCache)
     {
-        const std::vector<LocalPropertyOutput*>& propertyOutputs =
-                propertyWriter->GetPropertyOutputs();
+        auto& propertyOutputs = propertyWriter->GetPropertyOutputs();
 
         // Iterate over each property output spec.
-        for (auto propertyOutput : propertyOutputs)
+        for (auto& propertyOutput : propertyOutputs)
         {
             // Only consider the ones that are being written this iteration.
-            if (propertyOutput->ShouldWrite(simulationState.GetTimeStep()))
+            if (propertyOutput.ShouldWrite(simulationState->GetTimeStep()))
             {
-                auto& outputFile = propertyOutput->GetOutputSpec();
+                auto& outputFile = propertyOutput.GetOutputSpec();
 
                 // Iterate over each field.
                 for (auto&& fieldSpec: outputFile.fields)
@@ -77,9 +76,9 @@ namespace hemelb::extraction
 
     void PropertyActor::EndIteration()
     {
-      timers[reporting::Timers::extractionWriting].Start();
-      propertyWriter->Write(simulationState.GetTimeStep(), simulationState.GetTotalTimeSteps());
-      timers[reporting::Timers::extractionWriting].Stop();
+      timers.extractionWriting().Start();
+      propertyWriter->Write(simulationState->GetTimeStep(), simulationState->GetEndTimeStep());
+      timers.extractionWriting().Stop();
     }
 
 }

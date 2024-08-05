@@ -7,7 +7,8 @@
 #include <boost/uuid/uuid_io.hpp>
 #include <catch2/catch.hpp>
 
-#include "SimulationMaster.h"
+#include "SimulationController.h"
+#include "configuration/SimBuilder.h"
 #include "lb/lattices/D3Q19.h"
 #include "Traits.h"
 #include "redblood/MeshIO.h"
@@ -22,8 +23,7 @@ namespace hemelb::tests
     TEST_CASE_METHOD(helpers::FolderTestFixture, "Fedosov validation tests", "[redblood][.long]") {
 
       using Traits = Traits<lb::D3Q19, lb::GuoForcingLBGK>;
-      using CellControl = hemelb::redblood::CellController<Traits>;
-      using MasterSim = SimulationMaster<Traits>;
+      using CellControl = CellController<Traits>;
 
       CopyResourceToTempdir("fedosov1c.xml");
       CopyResourceToTempdir("fedosov1c.gmy");
@@ -36,15 +36,15 @@ namespace hemelb::tests
       argv[2] = "fedosov1c.xml";
 
       configuration::CommandLine options(argc, argv);
-      auto master = std::make_shared<MasterSim>(options, Comms());
+      auto sim = configuration::SimBuilder::CreateSim<Traits>(options, Comms());
       redblood::VTKMeshIO vtk_io = {};
 
       SECTION("Integration test") {
-	REQUIRE(master);
-	auto const & converter = master->GetUnitConverter();
-	auto controller = std::static_pointer_cast<CellControl>(master->GetCellController());
+	REQUIRE(sim);
+	auto const & converter = sim->GetUnitConverter();
+	auto controller = std::static_pointer_cast<CellControl>(sim->GetCellController());
 	REQUIRE(controller);
-	controller->AddCellChangeListener([vtk_io, &converter](const hemelb::redblood::CellContainer &cells) {
+	controller->AddCellChangeListener([vtk_io, &converter](const CellContainer &cells) {
 	    static int iter = 0;
 	    if(cells.empty()) {
 	      return;
@@ -53,14 +53,14 @@ namespace hemelb::tests
 	    if(iter % 1000 == 0) {
 	      std::stringstream filename;
 	      filename << cell->GetTag() << "_t_" << iter << ".vtp";
-	      vtk_io.writeFile(filename.str(), *cell, converter);
+	      vtk_io.writeFile(filename.str(), *cell, &converter);
 	    }
 	    ++iter;
 	  });
 
 	// run the simulation
-	master->RunSimulation();
-	master->Finalise();
+	sim->RunSimulation();
+	sim->Finalise();
 
 	AssertPresent("results/report.txt");
 	AssertPresent("results/report.xml");

@@ -11,12 +11,12 @@
 #include "Exception.h"
 #include "build_info.h"
 
-#define HASSERT(expr) \
+#define HASSERT(expr) do {\
 if constexpr (::hemelb::DEBUG) { \
     if (!(expr)) { \
         throw (::hemelb::Exception() << "Assertion failure '" #expr "' in '" __FILE__ ":" << __LINE__); \
     } \
-}
+}} while (0)
 
 #else // Fall back to C assert macro
 #include <cassert>

@@ -73,7 +73,7 @@ GeometryWriter::GeometryWriter(const std::string& OutputGeometryFile,
 
     // Setup the encoder for the header
     this->headerBufferLength = this->bodyStart - this->headerStart;
-    this->headerBuffer = new char[this->headerBufferLength];
+    this->headerBuffer = new std::byte[this->headerBufferLength];
     this->headerEncoder = new hemelb::io::XdrMemWriter(
         this->headerBuffer, this->headerBufferLength);
   }

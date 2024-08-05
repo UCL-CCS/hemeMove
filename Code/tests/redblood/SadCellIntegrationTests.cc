@@ -7,7 +7,8 @@
 #include <boost/uuid/uuid_io.hpp>
 #include <catch2/catch.hpp>
 
-#include "SimulationMaster.h"
+#include "SimulationController.h"
+#include "configuration/SimBuilder.h"
 #include "lb/lattices/D3Q19.h"
 #include "Traits.h"
 #include "redblood/Mesh.h"
@@ -22,12 +23,11 @@ namespace hemelb::tests
 
     TEST_CASE_METHOD(helpers::FolderTestFixture,
 		     "SadCellIntegrationTests", "[redblood][.long]") {
-      using Traits = Traits<lb::D3Q19, hemelb::lb::GuoForcingLBGK>;
-      using CellControl = hemelb::redblood::CellController<Traits>;
-      using MasterSim = SimulationMaster<Traits>;
+      using Traits = Traits<lb::D3Q19, lb::GuoForcingLBGK>;
+      using CellControl = CellController<Traits>;
 
-      redblood::KruegerMeshIO msh_io = {};
-      redblood::VTKMeshIO vtk_io = {};
+      KruegerMeshIO msh_io = {};
+      VTKMeshIO vtk_io = {};
 
       CopyResourceToTempdir("large_cylinder_rbc.xml");
       CopyResourceToTempdir("large_cylinder.gmy");
@@ -35,7 +35,7 @@ namespace hemelb::tests
 
       ModifyXMLInput("large_cylinder_rbc.xml", { "simulation", "steps", "value" }, 10000);
       ModifyXMLInput("large_cylinder_rbc.xml", { "redbloodcells",
-	    "cells",
+	    "templates",
 	    "cell",
 	    "shape",
 	    "mesh_path" },
@@ -46,7 +46,7 @@ namespace hemelb::tests
 	    "mean",
 	    "value" },
 	0);
-      DeleteXMLInput("large_cylinder_rbc.xml", { "redbloodcells", "cells" });
+      DeleteXMLInput("large_cylinder_rbc.xml", { "redbloodcells", "templates" });
       DeleteXMLInput("large_cylinder_rbc.xml", { "inlets", "inlet", "flowextension" });
       DeleteXMLInput("large_cylinder_rbc.xml", { "outlets", "outlet", "flowextension" });
 
@@ -56,14 +56,14 @@ namespace hemelb::tests
 	"-in",
 	"large_cylinder_rbc.xml",
       };
-      hemelb::configuration::CommandLine options(argc, argv);
+      configuration::CommandLine options(argc, argv);
 
-      auto master = std::make_shared<MasterSim>(options, Comms());
+      auto sim = configuration::SimBuilder::CreateSim<Traits>(options, Comms());
 
       SECTION("integration test") {
 	auto const normal = msh_io.readFile(resources::Resource("rbc_ico_1280.msh").Path(), true);
 	auto const cell = std::make_shared<redblood::Cell>(normal->vertices, normal);
-	auto const & converter = master->GetUnitConverter();
+	auto const & converter = sim->GetUnitConverter();
 	auto const deformed = msh_io.readFile(resources::Resource("sad.msh").Path(), true);
 	auto const sadcell = std::make_shared<redblood::Cell>(deformed->vertices, normal);
 	auto const scale = converter.ConvertToLatticeUnits("m", 4e-6);
@@ -73,18 +73,18 @@ namespace hemelb::tests
 	sadcell->SetScale(scale);
 	*sadcell *= 1e0 / converter.GetVoxelSize();
 	*sadcell += converter.ConvertPositionToLatticeUnits(PhysicalPosition(0, 0, 0))
-	  - sadcell->GetBarycenter();
+	  - sadcell->GetBarycentre();
 	*cell += converter.ConvertPositionToLatticeUnits(PhysicalPosition(0, 0, 0))
-	  - cell->GetBarycenter();
-	vtk_io.writeFile("/tmp/ideal.vtp", *cell, converter);
-	vtk_io.writeFile("/tmp/deformed.vtp", *sadcell, converter);
+	  - cell->GetBarycentre();
+	vtk_io.writeFile("/tmp/ideal.vtp", *cell, &converter);
+	vtk_io.writeFile("/tmp/deformed.vtp", *sadcell, &converter);
 	sadcell->moduli.bending = 0.0000375;
 	sadcell->moduli.surface = 1e0;
 	sadcell->moduli.volume = 1e0;
 	sadcell->moduli.dilation = 0.5;
 	sadcell->moduli.strain = 0.0006;
 
-	auto controller = std::static_pointer_cast<CellControl>(master->GetCellController());
+	auto controller = std::static_pointer_cast<CellControl>(sim->GetCellController());
 	controller->AddCell(sadcell);
 	std::vector<PhysicalEnergy> energies;
 	energies.push_back( (*sadcell)());
@@ -98,19 +98,19 @@ namespace hemelb::tests
 	      if(iter % 1000 == 0) {
 		std::stringstream filename;
 		filename << cell->GetTag() << "_t_" << iter << ".vtp";
-		vtk_io.writeFile(filename.str(), *cell, converter);
+		vtk_io.writeFile(filename.str(), *cell, &converter);
 	      }
 	    }
 	    ++iter;
 	  });
 
 	// run the simulation
-	master->RunSimulation();
-	vtk_io.writeFile("/tmp/reformed.vtp", *sadcell, converter);
+	sim->RunSimulation();
+	vtk_io.writeFile("/tmp/reformed.vtp", *sadcell, &converter);
 
 	*sadcell += converter.ConvertPositionToLatticeUnits(PhysicalPosition(0, 0, 0))
-	  - sadcell->GetBarycenter();
-	vtk_io.writeFile("/tmp/reformed_centered.vtp", *sadcell, converter);
+	  - sadcell->GetBarycentre();
+	vtk_io.writeFile("/tmp/reformed_centered.vtp", *sadcell, &converter);
 
 	AssertPresent("results/report.txt");
 	AssertPresent("results/report.xml");

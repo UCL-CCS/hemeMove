@@ -30,7 +30,7 @@ namespace hemelb
   }
   namespace extraction
   {
-    // Read this ranks's part of a checkpoint file.
+    // Read this rank's part of a checkpoint file.
     class LocalDistributionInput
     {
       public:

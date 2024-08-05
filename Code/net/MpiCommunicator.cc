@@ -11,6 +11,17 @@
 
 namespace hemelb::net
 {
+    void MpiRequest::Waitall(std::span<MpiRequest> reqs) {
+        // These asserts check that there's no extra data in an
+        // MpiRequest object, so we can effectively just pointer
+        // alias a span of them.
+        static_assert(sizeof(MpiRequest) == sizeof(MPI_Request));
+        static_assert(alignof(MpiRequest)== alignof(MPI_Request));
+        int N = std::ssize(reqs);
+        MPI_Request* data = reqs.data() ? &reqs.data()->req : nullptr;
+        MpiCall{MPI_Waitall}(N, data, MPI_STATUSES_IGNORE);
+    }
+
     namespace {
       void Deleter(MPI_Comm* comm)
       {
@@ -89,6 +100,12 @@ namespace hemelb::net
             val.resize(len);
         }
         Broadcast(std::span<char>{val.data(), len}, root);
+    }
+
+    MpiRequest MpiCommunicator::Ibarrier() const {
+        MpiRequest ans;
+        MpiCall{MPI_Ibarrier}(*commPtr, &ans.req);
+        return ans;
     }
 
     MpiGroup MpiCommunicator::Group() const

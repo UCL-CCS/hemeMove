@@ -23,17 +23,72 @@
  */
 namespace hemelb::lb
 {
+
+    /// Holds LBM data and behaviour that does not depend on the velocity set/collision etc.
+    class LBMBase : public net::IteratedAction {
+    protected:
+        net::Net* mNet;
+        geometry::FieldData* mLatDat;
+        SimulationState* mState;
+        BoundaryValues *mInletValues = nullptr;
+        BoundaryValues* mOutletValues = nullptr;
+
+        LbmParameters mParams;
+
+        hemelb::reporting::Timers &timings;
+
+        MacroscopicPropertyCache propertyCache;
+
+        geometry::neighbouring::NeighbouringDataManager *neighbouringDataManager;
+
+    public:
+        /// OK, with apologies we have a 2-stage construction process.
+        /// The result of this constructor isn't yet ready to simulate, it must
+        /// have Initialise(...) called also.
+        ///
+        /// Constructor separated due to need to access the partially initialized
+        /// LBM in order to initialize the arguments to the second construction phase.
+        LBMBase(LbmParameters params, net::Net* net,
+            geometry::FieldData* latDat, SimulationState* simState, reporting::Timers &atimings,
+            geometry::neighbouring::NeighbouringDataManager *neighbouringDataManager);
+
+        /// Second constructor.
+        void Initialise(BoundaryValues* iInletValues,
+                        BoundaryValues* iOutletValues);
+
+        void RequestComms() override; ///< part of IteratedAction interface.
+        void EndIteration() override; ///< part of IteratedAction interface.
+
+        inline LbmParameters* GetLbmParams() {
+            return &mParams;
+        }
+        inline MacroscopicPropertyCache& GetPropertyCache() {
+            return propertyCache;
+        }
+
+        /// Interface to apply initial conditions
+        virtual void SetInitialConditions(lb::InitialCondition const& ic_conf, const net::IOCommunicator& ioComms) = 0;
+
+    protected:
+        virtual void InitCollisions() = 0;
+
+        /**
+         * Ensure that the BoundaryValues objects have all necessary fields populated.
+         */
+        void PrepareBoundaryObjects();
+    };
+
     /**
      * Class providing core Lattice Boltzmann functionality.
      * Implements the IteratedAction interface.
      */
     template<class TRAITS = hemelb::Traits<>>
-    class LBM : public net::IteratedAction
+    class LBM : public LBMBase
     {
-      public:
+    public:
         //! Instantiation type
         using Traits = TRAITS;
-      private:
+    private:
         using LatticeType = typename Traits::Lattice;
         // Use the kernel specified through the build system. This will select one of the above classes.
         using LBKernel = typename Traits::Kernel;
@@ -49,97 +104,45 @@ namespace hemelb::lb
         using tInletWallCollision = typename Traits::WallInletBoundary;
         using tOutletWallCollision = typename Traits::WallOutletBoundary;
 
-      public:
-        /**
-         * Constructor, stage 1.
-         * Object so initialized is not ready for simulation.
-         * Must have Initialise(...) called also. Constructor separated due to need to access
-         * the partially initialized LBM in order to initialize the arguments to the second construction phase.
-         */
-        LBM(LbmParameters params, net::Net* net,
-            geometry::FieldData* latDat, SimulationState* simState, reporting::Timers &atimings,
-            geometry::neighbouring::NeighbouringDataManager *neighbouringDataManager);
+    public:
+        using LBMBase::LBMBase;
         ~LBM() override = default;
 
-        void RequestComms() override; ///< part of IteratedAction interface.
+
         void PreSend() override; ///< part of IteratedAction interface.
         void PreReceive() override; ///< part of IteratedAction interface.
         void PostReceive() override; ///< part of IteratedAction interface.
-        void EndIteration() override; ///< part of IteratedAction interface.
 
-        [[nodiscard]] site_t TotalFluidSiteCount() const;
-        void SetTotalFluidSiteCount(site_t);
 
-        /**
-         * Second constructor.
-         *
-         */
-        void Initialise(BoundaryValues* iInletValues,
-                        BoundaryValues* iOutletValues);
+        void SetInitialConditions(lb::InitialCondition const& ic_conf, const net::IOCommunicator& ioComms) override;
 
-        void SetInitialConditions(lb::InitialCondition const& ic_conf, const net::IOCommunicator& ioComms);
+    private:
 
-        hemelb::lb::LbmParameters *GetLbmParams();
-        lb::MacroscopicPropertyCache& GetPropertyCache();
+        void InitCollisions() override;
 
-      private:
-
-        void InitCollisions();
-        // The following function pair simplify initialising the site ranges for each collider object.
-        void InitInitParamsSiteRanges(InitParams& initParams, unsigned& state);
-        void AdvanceInitParamsSiteRanges(InitParams& initParams, unsigned& state);
-        /**
-         * Ensure that the BoundaryValues objects have all necessary fields populated.
-         */
-        void PrepareBoundaryObjects();
-
-        void ReadParameters();
-
-        void handleIOError(int iError);
-
-        // Collision objects
+        /// Collision objects
+        /// We hold these in a tuple to allow heterogeneous iteration over them.
         // TODO: these should probably be optional but we can't because some of the collisions aren't copyable
-        std::unique_ptr<tMidFluidCollision> mMidFluidCollision;
-        std::unique_ptr<tWallCollision> mWallCollision;
-        std::unique_ptr<tInletCollision> mInletCollision;
-        std::unique_ptr<tOutletCollision> mOutletCollision;
-        std::unique_ptr<tInletWallCollision> mInletWallCollision;
-        std::unique_ptr<tOutletWallCollision> mOutletWallCollision;
+        using CollisionTuple = std::tuple<
+                std::unique_ptr<tMidFluidCollision>,
+                std::unique_ptr<tWallCollision>,
+                std::unique_ptr<tInletCollision>,
+                std::unique_ptr<tOutletCollision>,
+                std::unique_ptr<tInletWallCollision>,
+                std::unique_ptr<tOutletWallCollision>
+        >;
+        CollisionTuple mCollisions;
 
-        void StreamAndCollide(streamer auto& s, const site_t iFirstIndex,
-                              const site_t iSiteCount)
+        void StreamAndCollide(streamer auto& s, const site_t beginIndex, const site_t endIndex)
         {
-            s.StreamAndCollide(iFirstIndex,
-                                                 iSiteCount,
-                                                 &mParams,
-                                                 *mLatDat,
-                                                 propertyCache);
+            s.StreamAndCollide(beginIndex, endIndex, &mParams, *mLatDat, propertyCache);
         }
 
-        void PostStep(streamer auto& s, const site_t iFirstIndex, const site_t iSiteCount)
+        void PostStep(streamer auto& s, const site_t beginIndex, const site_t endIndex)
         {
-            s.PostStep(iFirstIndex,
-                                           iSiteCount,
-                                           &mParams,
-                                           *mLatDat,
-                                           propertyCache);
-
+            s.PostStep(beginIndex, endIndex, &mParams, *mLatDat, propertyCache);
         }
 
-        net::Net* mNet;
-        geometry::FieldData* mLatDat;
-        SimulationState* mState;
-        BoundaryValues *mInletValues = nullptr,
-                *mOutletValues = nullptr;
-
-        LbmParameters mParams;
-
-        hemelb::reporting::Timers &timings;
-
-        MacroscopicPropertyCache propertyCache;
-
-        geometry::neighbouring::NeighbouringDataManager *neighbouringDataManager;
     };
-
 }
 #endif // HEMELB_LB_LB_H

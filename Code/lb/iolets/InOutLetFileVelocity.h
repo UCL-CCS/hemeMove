@@ -11,19 +11,19 @@
 namespace hemelb::lb
 {
 
-      class InOutLetFileVelocity : public InOutLetVelocity
-      {
-        public:
-          InOutLetFileVelocity();
+    class InOutLetFileVelocity : public InOutLetVelocity
+    {
+    public:
+        InOutLetFileVelocity();
 
-	  ~InOutLetFileVelocity() override = default;
+        ~InOutLetFileVelocity() override = default;
 
-          [[nodiscard]] InOutLet* clone() const override;
+        [[nodiscard]] InOutLet* clone() const override;
 
-	  void Reset(SimulationState &state) override
-          {
-            CalculateTable(state.GetTotalTimeSteps(), state.GetTimeStepLength());
-          }
+        inline void Reset(SimulationState &state) override
+        {
+            CalculateTable(state.GetStartTimeStep(), state.GetEndTimeStep(), state.GetTimeStepLength());
+        }
 
           const std::string& GetFilePath()
           {
@@ -45,7 +45,7 @@ namespace hemelb::lb
         private:
           std::string velocityFilePath;
           std::string velocityWeightsFilePath;
-          void CalculateTable(LatticeTimeStep totalTimeSteps, PhysicalTime timeStepLength);
+          void CalculateTable(LatticeTimeStep startTS, LatticeTimeStep endTS, PhysicalTime timeStepLength);
           std::vector<LatticeSpeed> velocityTable;
           const util::UnitConverter* units;
 

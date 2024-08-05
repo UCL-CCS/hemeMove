@@ -8,6 +8,7 @@
 #include <string>
 
 #include "configuration/SimConfig.h"
+#include "io/ensure_hexfloat.h"
 #include "net/MpiEnvironment.h"
 
 using SimConfig = hemelb::configuration::SimConfig;
@@ -23,6 +24,8 @@ int main(int argc, char *argv[])
   }
 
   const auto xml_path = std::string{argv[1]};
+
+  hemelb::io::GlobalHexFloatLocale ensure_hexfloat;
 
   // When #755 is closed, remove MPI
   hemelb::net::MpiEnvironment mpi(argc, argv);

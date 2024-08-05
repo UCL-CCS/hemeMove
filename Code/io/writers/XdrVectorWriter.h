@@ -12,23 +12,23 @@
 
 namespace hemelb::io
 {
-    using char_vec = std::vector<char>;
-    using char_vec_appender = std::back_insert_iterator<char_vec>;
+    using byte_vec = std::vector<std::byte>;
+    using byte_vec_appender = std::back_insert_iterator<byte_vec>;
 
     // XDR encoder that will put its buffer in a vector so you
     // don't have to worry about managing memory. The encoder owns
     // the memory but you can get a reference to the data with
     // GetBuf()
-    class XdrVectorWriter : public XdrMetaWriter<char_vec_appender, char_vec>
+    class XdrVectorWriter : public XdrMetaWriter<byte_vec_appender, byte_vec>
     {
-        using base = XdrMetaWriter<char_vec_appender, char_vec>;
+        using base = XdrMetaWriter<byte_vec_appender, byte_vec>;
     public:
         // Start with no memory reserved
         XdrVectorWriter();
         // Reserve n bytes of memory for storage
         XdrVectorWriter(size_t n);
 
-        const char_vec& GetBuf() const;
+        const byte_vec& GetBuf() const;
     };
 
 }

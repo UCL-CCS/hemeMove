@@ -4,14 +4,17 @@
 // license in the file LICENSE.
 
 #include <catch2/catch.hpp>
-#include <tinyxml.h>
 
-#include "configuration/SimConfig.h"
+#include "io/xml.h"
+#include "configuration/CommandLine.h"
 #include "configuration/SimBuilder.h"
+#include "configuration/SimConfigReader.h"
 #include "redblood/CellControllerBuilder.h"
 #include "redblood/MeshIO.h"
+#include "redblood/CellIO.h"
 #include "redblood/FaderCell.h"
 
+#include "tests/helpers/ApproxVector.h"
 #include "tests/helpers/FolderTestFixture.h"
 #include "tests/helpers/SimConfBuildHelp.h"
 
@@ -31,46 +34,46 @@ auto dynamic_unique_cast(std::unique_ptr<From>&& src) {
 namespace hemelb::tests
 {
     using namespace redblood;
+    namespace fs = std::filesystem;
 
     TEST_CASE_METHOD(helpers::FolderTestFixture, "CellIOTests", "[redblood]") {
-        TiXmlDocument doc;
+        //tinyxml2::XMLDocument doc;
+        io::xml::Document doc;
         LatticeDistance scale;
 
         auto converter = std::make_shared<util::UnitConverter>(0.5, 0.6, LatticePosition(1, 2, 3), 1000.0, 0.0);
 
         CopyResourceToTempdir("red_blood_cell.txt");
         CopyResourceToTempdir("empty_for_relative_paths.xml");
-        auto config = std::make_unique<UninitSimConfig>("empty_for_relative_paths.xml");
-        auto builder = UninitSimBuilder(*config, converter);
+        configuration::SimConfig config;
+        configuration::SimConfigReader reader("empty_for_relative_paths.xml");
+        //auto config = std::make_unique<UninitSimConfig>("empty_for_relative_paths.xml");
+        auto builder = UninitSimBuilder(config, converter);
         auto cell_builder = CellControllerBuilder(converter);
         {
-            // It seems TiXML might take care of deallocation
-            auto const parent = new TiXmlElement("parent");
-            doc.LinkEndChild(parent);
-            auto const cell = new TiXmlElement("cell");
-            auto const shape = new TiXmlElement("shape");
-            shape->SetAttribute("mesh_path", "red_blood_cell.txt");
-            shape->SetAttribute("mesh_format", "Krueger");
-            cell->LinkEndChild(shape);
-            auto const scaleXML = new TiXmlElement("scale");
-            scale = 1.5;
-            scaleXML->SetDoubleAttribute("value", scale);
-            scaleXML->SetAttribute("units", "m");
-            cell->LinkEndChild(scaleXML);
+            // This allocates an element, but doesn't add to the document.
+            // (Note: elements are owned by their document)
+            auto parent = doc.AddChild("parent");
+            auto cell = parent.AddChild("cell");
 
-            auto const moduli = new TiXmlElement("moduli");
-            auto add_stuff = [moduli](std::string const& name, std::string const& units, Dimensionless value) {
-                auto elem = new TiXmlElement(name);
-                elem->SetDoubleAttribute("value", value);
-                elem->SetAttribute("units", units);
-                moduli->LinkEndChild(elem);
+            auto shape = cell.AddChild("shape");
+            shape.SetAttribute("mesh_path", "red_blood_cell.txt");
+            shape.SetAttribute("mesh_format", "Krueger");
+
+            auto scaleXML = cell.AddChild("scale");
+            scale = 1.5;
+            scaleXML.SetAttribute("value", scale);
+            scaleXML.SetAttribute("units", "m");
+
+            auto moduli = cell.AddChild("moduli");
+            auto add_stuff = [&moduli](char const *name, char const *units, Dimensionless value) {
+                auto elem = moduli.AddChild(name);
+                elem.SetAttribute("value", value);
+                elem.SetAttribute("units", units);
             };
             add_stuff("surface", "lattice", 2e0);
             add_stuff("dilation", "lattice", 0.58);
             add_stuff("bending", "Nm", 2e-18);
-            cell->LinkEndChild(moduli);
-
-            parent->LinkEndChild(cell);
         }
 
         auto approx = Approx(0.0).margin(1e-12);
@@ -78,11 +81,11 @@ namespace hemelb::tests
         // Reads cell with minimum stuff
         SECTION("testReadCellWithDefaults") {
             // Remove moduli, so we get default behavior
-            auto cellEl = doc.FirstChildElement("parent")->FirstChildElement("cell");
-            cellEl->RemoveChild(cellEl->FirstChildElement("moduli"));
+            auto cellEl = doc.GetRoot().GetChildOrThrow("cell");
+            cellEl.GetChildOrThrow("moduli").Delete();
 
-            auto cellConf = config->readCell(cellEl);
-            auto cell = dynamic_unique_cast<Cell const>(cell_builder.build_cell(cellConf));
+            auto cellConf = reader.readCell(cellEl);
+            auto cell = dynamic_unique_cast < Cell const>(cell_builder.build_cell(cellConf));
             REQUIRE(cell);
             auto const kruegerIO = redblood::KruegerMeshIO{};
             auto const data = kruegerIO.readFile("red_blood_cell.txt", true);
@@ -96,7 +99,8 @@ namespace hemelb::tests
         }
 
         SECTION("testReadCellModuli") {
-            auto cellConf = config->readCell(doc.FirstChildElement("parent")->FirstChildElement("cell"));
+            auto cellEl = doc.GetRoot().GetChildOrThrow("cell");
+            auto cellConf = reader.readCell(cellEl);
             auto const moduli = cell_builder.build_cell_moduli(cellConf.moduli);
             REQUIRE(approx(1e0) == moduli.volume);
             REQUIRE(approx(2e0) == moduli.surface);
@@ -106,12 +110,12 @@ namespace hemelb::tests
         }
 
         SECTION("testReadMeshTemplates") {
-            const char* xml_text = "<parent>"
+            const char *xml_text = "<parent>"
                                    "  <inlets>"
                                    "   <inlet>"
                                    "     <condition type=\"pressure\" subtype=\"cosine\">"
-                                   "       <amplitude value=\"0\" units=\"mmHg\" />"
-                                   "       <mean value=\"0\" units=\"mmHg\" />"
+                                   "       <amplitude value=\"0\" units=\"Pa\" />"
+                                   "       <mean value=\"0\" units=\"Pa\" />"
                                    "       <phase value=\"0\" units=\"rad\" />"
                                    "       <period value=\"1\" units=\"s\" />"
                                    "     </condition>"
@@ -127,8 +131,8 @@ namespace hemelb::tests
                                    "  <outlets>"
                                    "    <outlet>"
                                    "     <condition type=\"pressure\" subtype=\"cosine\">"
-                                   "       <amplitude value=\"0\" units=\"mmHg\" />"
-                                   "       <mean value=\"0\" units=\"mmHg\" />"
+                                   "       <amplitude value=\"0\" units=\"Pa\" />"
+                                   "       <mean value=\"0\" units=\"Pa\" />"
                                    "       <phase value=\"0\" units=\"rad\" />"
                                    "       <period value=\"1\" units=\"s\" />"
                                    "     </condition>"
@@ -142,7 +146,7 @@ namespace hemelb::tests
                                    "    </outlet>"
                                    "  </outlets>"
                                    "  <redbloodcells>"
-                                   "    <cells>"
+                                   "    <templates>"
                                    "      <cell>"
                                    "        <shape mesh_path=\"red_blood_cell.txt\" mesh_format=\"Krueger\" />"
                                    "        <scale units=\"m\" value=\"0.6\"/>"
@@ -151,15 +155,17 @@ namespace hemelb::tests
                                    "       <shape mesh_path=\"red_blood_cell.txt\" mesh_format=\"Krueger\" />"
                                    "       <scale units=\"m\" value=\"0.5\"/>"
                                    "     </cell>"
-                                   "   </cells>"
+                                   "   </templates>"
                                    "  </redbloodcells>"
                                    "</parent>";
-            TiXmlDocument document;
-            document.Parse(xml_text);
-            auto root = document.FirstChildElement("parent");
-            auto tc_conf = config->readTemplateCells(root->FirstChildElement("redbloodcells")->FirstChildElement("cells"));
-            auto in_conf = config->DoIOForInOutlets(root->FirstChildElement("inlets"));
-            auto out_conf = config->DoIOForInOutlets(root->FirstChildElement("outlets"));
+            io::xml::Document document;
+            document.LoadString(xml_text);
+            auto root = document.GetRoot();
+            auto cellsEl = root.GetChildOrThrow("redbloodcells").GetChildOrThrow("templates");
+            auto tc_conf = reader.readTemplateCells(cellsEl);
+            configuration::GlobalSimInfo sim_info;
+            auto in_conf = reader.DoIOForInOutlets(sim_info, root.GetChildOrThrow("inlets"));
+            auto out_conf = reader.DoIOForInOutlets(sim_info, root.GetChildOrThrow("outlets"));
             auto ins = builder.BuildIolets(in_conf);
             auto outs = builder.BuildIolets(out_conf);
 
@@ -169,8 +175,8 @@ namespace hemelb::tests
             REQUIRE(size_t(2) == cells->size());
             REQUIRE(size_t(1) == cells->count("default"));
             REQUIRE(size_t(1) == cells->count("joe"));
-            auto const default_ = std::static_pointer_cast<FaderCell>( (*cells)["default"]);
-            auto const joe = std::static_pointer_cast<FaderCell>( (*cells)["joe"]);
+            auto const default_ = std::static_pointer_cast<FaderCell>((*cells)["default"]);
+            auto const joe = std::static_pointer_cast<FaderCell>((*cells)["joe"]);
             REQUIRE(default_->GetTemplateName() == "default");
             REQUIRE(joe->GetTemplateName() == "joe");
             REQUIRE(Approx(converter->ConvertToLatticeUnits("m", 0.6)).margin(1e-8)
@@ -181,6 +187,54 @@ namespace hemelb::tests
             REQUIRE(static_cast<bool>(joe->GetIOlets()));
             REQUIRE(default_->GetIOlets() == joe->GetIOlets());
             REQUIRE(size_t(2) == joe->GetIOlets()->size());
+        }
+
+        // Reads cell with minimum stuff
+        SECTION("ReadWriteReadCell") {
+            // Remove moduli, so we get default behavior
+            auto cellEl = doc.GetRoot().GetChildOrThrow("cell");
+            cellEl.GetChildOrThrow("moduli").Delete();
+
+            auto cellConf = reader.readCell(cellEl);
+            auto cell = std::shared_ptr(cell_builder.build_cell(cellConf));
+            {
+                // Write the cell mesh and barycentre data
+                auto cells = CellContainer{};
+                cells.insert(cell);
+                auto outConf = configuration::CellOutputConfig{10, false};
+                configuration::CommandLine cmdline({"hemelb", "-in", "empty_for_relative_paths.xml"});
+                auto pathmgr = std::make_shared<configuration::PathManager>(cmdline, Comms().OnIORank(), Comms().Size());
+                auto simState = std::make_shared<lb::SimulationState>(0.1, 1000);
+                auto full_out = cell_builder.build_full_cell_output(outConf, simState, pathmgr, Comms());
+                auto summ_out = cell_builder.build_summary_cell_output(outConf, simState, pathmgr, Comms());
+
+                full_out(cells);
+                summ_out(cells);
+            }
+            {
+                // Check barycentre
+                auto bary_path = fs::path{"results/Cells/0/barycentres.rbc"};
+                REQUIRE(fs::exists(bary_path));
+                auto bci = CellBarycentreInput{bary_path};
+                auto ncells = bci.ReadHeader();
+                REQUIRE(ncells == 1);
+                auto cell_summary = bci.ReadRows(Comms(), 0, 1);
+                auto [uuid, bcpos] = cell_summary[0];
+                REQUIRE(uuid == cell->GetTag());
+                REQUIRE(bcpos == ApproxV(cell->GetBarycentre()));
+
+                // Check mesh
+                char tag[36+5];
+                to_chars(uuid, tag);
+                std::strncpy(tag + 36, ".vtp", 5);
+                auto mesh_path = fs::path{"results/Cells/0"} / tag;
+                REQUIRE(fs::exists(mesh_path));
+
+                auto mesh_reader = VTKMeshIO{};
+                auto actual_mesh = mesh_reader.readFile(mesh_path, false);
+                REQUIRE(cell->GetVertices() == actual_mesh->vertices);
+                REQUIRE(cell->GetFacets() == actual_mesh->facets);
+            }
         }
     }
 }

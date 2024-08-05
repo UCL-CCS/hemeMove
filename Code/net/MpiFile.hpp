@@ -14,12 +14,12 @@ namespace hemelb::net
     template<typename T, std::size_t N>
     void MpiFile::Read(std::span<T, N> buffer, MPI_Status* stat)
     {
-      MpiCall{MPI_File_read}(*filePtr, &buffer[0], buffer.size(), MpiDataType<T>(), stat);
+        MpiCall{MPI_File_read}(*filePtr, buffer.data(), buffer.size(), MpiDataType<T>(), stat);
     }
     template<typename T, std::size_t N>
     void MpiFile::ReadAt(MPI_Offset offset, std::span<T, N> buffer, MPI_Status* stat)
     {
-      MpiCall{MPI_File_read_at}(*filePtr, offset, &buffer[0], buffer.size(), MpiDataType<T>(), stat);
+	MpiCall{MPI_File_read_at}(*filePtr, offset, buffer.data(), buffer.size(), MpiDataType<T>(), stat);
     }
     template<typename T, std::size_t N>
     void MpiFile::ReadAtAll(MPI_Offset offset, std::span<T, N> buffer, MPI_Status* stat)

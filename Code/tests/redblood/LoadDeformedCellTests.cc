@@ -8,7 +8,7 @@
 #include <catch2/catch.hpp>
 #include <boost/uuid/uuid_io.hpp>
 
-#include "SimulationMaster.h"
+#include "configuration/SimBuilder.h"
 #include "lb/lattices/D3Q19.h"
 #include "Traits.h"
 #include "redblood/Mesh.h"
@@ -25,7 +25,6 @@ namespace hemelb::tests
 
       using Traits = Traits<lb::D3Q19, lb::GuoForcingLBGK>;
       using CellControl = hemelb::redblood::CellController<Traits>;
-      using MasterSim = SimulationMaster<Traits>;
 
       redblood::VTKMeshIO io = {};
 
@@ -47,14 +46,14 @@ namespace hemelb::tests
       DeleteXMLInput("large_cylinder_rbc.xml", { "inlets", "inlet", "insertcell" });
       DeleteXMLInput("large_cylinder_rbc.xml", { "inlets", "inlet", "flowextension" });
       DeleteXMLInput("large_cylinder_rbc.xml", { "outlets", "outlet", "flowextension" });
-      DeleteXMLInput("large_cylinder_rbc.xml", { "redbloodcells", "cells" });
+      DeleteXMLInput("large_cylinder_rbc.xml", { "redbloodcells", "templates" });
 
       int constexpr argc = 3;
       char const * argv[argc] = {
         "hemelb", "-in", "large_cylinder_rbc.xml",
       };
       auto options = std::make_shared<configuration::CommandLine>(argc, argv);
-      auto master = std::make_shared<MasterSim>(*options, Comms());
+      auto sim = configuration::SimBuilder::CreateSim<Traits>(*options, Comms());
 
       SECTION("testIntegration") {
         // Read meshes from disc
@@ -66,7 +65,7 @@ namespace hemelb::tests
         REQUIRE(volume(*normal) > 0.0);
         REQUIRE(volume(deformed->vertices, normal->facets) > 0.0);
 
-        auto const& converter = master->GetUnitConverter();
+        auto const& converter = sim->GetUnitConverter();
         auto const scale = converter.ConvertToLatticeUnits("m", 4e-6);
         auto const cell = std::make_shared<redblood::Cell>(normal->vertices,
                                                            Mesh(normal),
@@ -79,12 +78,12 @@ namespace hemelb::tests
         *cell *= scale;
         *sadcell *= scale;
         *cell += converter.ConvertPositionToLatticeUnits(PhysicalPosition(0, 0, 0))
-          - cell->GetBarycenter();
+          - cell->GetBarycentre();
         *sadcell += converter.ConvertPositionToLatticeUnits(PhysicalPosition(0, 0, 0))
-          - sadcell->GetBarycenter();
+          - sadcell->GetBarycentre();
 
-        io.writeFile("ideal.vtp", *cell, converter);
-        io.writeFile("deformed.vtp", *sadcell, converter);
+        io.writeFile("ideal.vtp", *cell, &converter);
+        io.writeFile("deformed.vtp", *sadcell, &converter);
 
         sadcell->moduli.bending = 0.1;
         sadcell->moduli.strain = 0.1;
@@ -92,7 +91,7 @@ namespace hemelb::tests
         sadcell->moduli.volume = 1e0;
         sadcell->moduli.dilation = 0.75;
 
-        auto controller = std::static_pointer_cast<CellControl>(master->GetCellController());
+        auto controller = std::static_pointer_cast<CellControl>(sim->GetCellController());
         controller->AddCell(sadcell);
 
         controller->AddCellChangeListener(
@@ -103,24 +102,24 @@ namespace hemelb::tests
               if(iter % 10 == 0) {
                 std::stringstream filename;
                 filename << cell->GetTag() << "_t_" << iter << ".vtp";
-                io.writeFile(filename.str(), *cell, converter);
+                io.writeFile(filename.str(), *cell, &converter);
               }
             }
             ++iter;
           });
 
         // run the simulation
-        master->RunSimulation();
+        sim->RunSimulation();
 
         // Check simulation ran until the end
         AssertPresent("results/report.txt");
         AssertPresent("results/report.xml");
 
         // Recentre simulated cell
-        io.writeFile("reformed.vtp", *sadcell, converter);
+        io.writeFile("reformed.vtp", *sadcell, &converter);
         *sadcell += converter.ConvertPositionToLatticeUnits(PhysicalPosition(0, 0, 0))
-          - sadcell->GetBarycenter();
-        io.writeFile("reformed_centered.vtp", *sadcell, converter);
+          - sadcell->GetBarycentre();
+        io.writeFile("reformed_centered.vtp", *sadcell, &converter);
 
 //            // TODO: Align both cells for comparison
 //            auto cell01 = cell->GetVertices()[350] - cell->GetVertices()[154];

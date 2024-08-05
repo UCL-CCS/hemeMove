@@ -19,8 +19,8 @@ namespace hemelb::tests
 
     TEST_CASE("UnitConverterTests") {
       auto unitConverter = util::UnitConverter(1., 1., Vector3D<double>(0.), 1000.0, 0.0);
-      PhysicalPressure pressMmHg = 81.0;
-      LatticeDensity densityLatt = unitConverter.ConvertPressureToLatticeUnits(pressMmHg) / Cs2;
+      PhysicalPressure pressPa = 81.0;
+      LatticeDensity densityLatt = unitConverter.ConvertPressureToLatticeUnits(pressPa) / Cs2;
       distribn_t tau = 0.5;
       const double epsilon = 1e-9;
       auto apprx = [&](double x) {
@@ -28,7 +28,7 @@ namespace hemelb::tests
       };
 
       SECTION("TestPressure") {
-	REQUIRE(apprx(pressMmHg) ==
+	REQUIRE(apprx(pressPa) ==
 		unitConverter.ConvertPressureToPhysicalUnits(densityLatt * Cs2));
       }
 
@@ -39,9 +39,9 @@ namespace hemelb::tests
 	lb::D3Q15::CalculateStressTensor(densityLatt, tau, fNonEquilibrium, stressTensor);
 	util::Matrix3D stressTensorPhys = unitConverter.ConvertFullStressTensorToPhysicalUnits(stressTensor);
 
-	REQUIRE(apprx(pressMmHg) == stressTensorPhys[0][0] / mmHg_TO_PASCAL);
-	REQUIRE(apprx(pressMmHg) == stressTensorPhys[1][1] / mmHg_TO_PASCAL);
-	REQUIRE(apprx(pressMmHg) == stressTensorPhys[2][2] / mmHg_TO_PASCAL);
+	REQUIRE(apprx(pressPa) == stressTensorPhys[0][0]);
+	REQUIRE(apprx(pressPa) == stressTensorPhys[1][1]);
+	REQUIRE(apprx(pressPa) == stressTensorPhys[2][2]);
 	REQUIRE(apprx((distribn_t) 0.) == stressTensorPhys[1][0]);
       }
 
@@ -59,9 +59,9 @@ namespace hemelb::tests
 	util::Vector3D<PhysicalStress> tractionPhys = unitConverter.ConvertTractionToPhysicalUnits(traction,
 												   wallNormal);
 
-	REQUIRE(apprx(pressMmHg) == tractionPhys[0] / mmHg_TO_PASCAL);
-	REQUIRE(apprx(0.0) == tractionPhys[1] / mmHg_TO_PASCAL);
-	REQUIRE(apprx(0.0) == tractionPhys[2] / mmHg_TO_PASCAL);
+	REQUIRE(apprx(pressPa) == tractionPhys[0]);
+	REQUIRE(apprx(0.0) == tractionPhys[1]);
+	REQUIRE(apprx(0.0) == tractionPhys[2]);
       }
 
     }

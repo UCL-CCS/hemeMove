@@ -6,6 +6,6 @@
 add_library(hemelb_extraction OBJECT
   GeometrySelector.cc
   StraightLineGeometrySelector.cc LocalPropertyOutput.cc
-  IterableDataSource.cc PlaneGeometrySelector.cc PropertyActor.cc
+  PlaneGeometrySelector.cc PropertyActor.cc
   PropertyWriter.cc WholeGeometrySelector.cc LbDataSourceIterator.cc
   GeometrySurfaceSelector.cc SurfacePointSelector.cc LocalDistributionInput.cc)

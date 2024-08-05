@@ -171,7 +171,7 @@ namespace hemelb::lb
     void IncompressibilityChecker<BroadcastPolicy>::PostReceiveFromChildren(
         unsigned long splayNumber)
     {
-      timings[hemelb::reporting::Timers::monitoring].Start();
+      timings.monitoring().Start();
 
       for (int childIndex = 0; childIndex < (int) SPREADFACTOR; childIndex++)
       {
@@ -181,13 +181,13 @@ namespace hemelb::lb
         upwardsDensityTracker.UpdateDensityTracker(childDensities);
       }
 
-      timings[hemelb::reporting::Timers::monitoring].Stop();
+      timings.monitoring().Stop();
     }
 
     template<class BroadcastPolicy>
     void IncompressibilityChecker<BroadcastPolicy>::PostSendToParent(unsigned long splayNumber)
     {
-      timings[hemelb::reporting::Timers::monitoring].Start();
+      timings.monitoring().Start();
 
       for (site_t i = 0; i < mLatDat->GetLocalFluidSiteCount(); i++)
       {
@@ -195,7 +195,7 @@ namespace hemelb::lb
                                                    propertyCache.velocityCache.Get(i).GetMagnitude());
       }
 
-      timings[hemelb::reporting::Timers::monitoring].Stop();
+      timings.monitoring().Stop();
     }
 
     template<class BroadcastPolicy>

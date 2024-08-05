@@ -8,6 +8,7 @@
 
 #include "lb/concepts.h"
 #include "lb/iolets/BoundaryValues.h"
+#include "geometry/Site.h"
 
 namespace hemelb::lb
 {

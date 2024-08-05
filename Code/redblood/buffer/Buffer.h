@@ -101,7 +101,7 @@ namespace hemelb::redblood::buffer
           //! True if next cell can be dropped
           bool isDroppablePosition(CellContainer::value_type const &candidate) const
           {
-            return isDroppablePosition(candidate->GetBarycenter());
+            return isDroppablePosition(candidate->GetBarycentre());
           }
           //! True if position corresponds to that of a droppable cell
           //! This function works in the buffer's cartesian coordinates. It will take care of adding

@@ -122,7 +122,7 @@ namespace hemelb::tests::LbTestsHelper
     {
         lb::HFunction<Lattice> HFunc(f, f_eq);
 
-        distribn_t alpha = hemelb::util::NumericalMethods::NewtonRaphson(&HFunc, 2.0, 1.0E-100);
+        distribn_t alpha = util::NewtonRaphson(HFunc, 2.0, 1.0E-100);
 
         for (unsigned int ii = 0; ii < Lattice::NUMVECTORS; ++ii)
         {

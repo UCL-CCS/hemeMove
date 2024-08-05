@@ -14,6 +14,8 @@
 
 namespace hemelb::lb {
 
+    class SimulationState;
+
     // This base class is a friend of SimulationState so it can set
     // the timestep
     struct InitialConditionBase {

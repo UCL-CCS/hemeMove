@@ -5,25 +5,18 @@
 
 #include "tests/helpers/HasCommsTestFixture.h"
 
-namespace hemelb
+namespace hemelb::tests::helpers
 {
-  namespace tests
-  {
-    namespace helpers
+
+    void HasCommsTestFixture::Init(const net::IOCommunicator& inst)
     {
-
-      void HasCommsTestFixture::Init(const net::IOCommunicator& inst)
-      {
-	hemelbCommunicator = &inst;
-      }
-
-      const net::IOCommunicator& HasCommsTestFixture::Comms()
-      {
-	return *hemelbCommunicator;
-      }
-
-      const net::IOCommunicator* HasCommsTestFixture::hemelbCommunicator = nullptr;
+        hemelbCommunicator = &inst;
     }
-  }
-}
 
+    const net::IOCommunicator& HasCommsTestFixture::Comms()
+    {
+        return *hemelbCommunicator;
+    }
+
+    const net::IOCommunicator* HasCommsTestFixture::hemelbCommunicator = nullptr;
+}

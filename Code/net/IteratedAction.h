@@ -6,9 +6,7 @@
 #ifndef HEMELB_NET_ITERATEDACTION_H
 #define HEMELB_NET_ITERATEDACTION_H
 #include "net/phased/Concern.h"
-namespace hemelb
-{
-  namespace net
+namespace hemelb::net
   {
     class IteratedAction : public phased::Concern
     {
@@ -19,8 +17,8 @@ namespace hemelb
          * @param action Enumeration indicating the step
          * @return True if an action was successfully called for the step
          */
-        bool CallAction(int action);
-        virtual ~IteratedAction();
+        bool CallAction(int action) final;
+        //~IteratedAction() override = default;
         virtual void RequestComms();
         virtual void PreSend();
         virtual void PreReceive();
@@ -28,6 +26,5 @@ namespace hemelb
         virtual void EndIteration();
     };
   }
-}
 
 #endif /* HEMELB_NET_ITERATEDACTION_H */

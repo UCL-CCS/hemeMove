@@ -76,14 +76,16 @@ namespace hemelb::redblood
         distribn_t density;
         auto site = latticeData.GetSite(index);
         LatticeForceVector const &force(site.GetForce());
-#ifdef HEMELB_USE_KRUEGER_ORDERING
-        // Use distribution functions at the beginning of the previous timestep (stored in
-        // FNew after the swap at the end of the timestep) in the IBM velocity interpolation.
-        // Follows approach in Timm's code
-        auto const fDistribution = latticeData.GetFNew<LatticeType>(index);
-#else
-        auto const fDistribution = site.GetFOld<LatticeType>();
-#endif
+        auto const fDistribution = [&]() {
+              if constexpr (build_info::USE_KRUEGER_ORDERING) {
+                  // Use distribution functions at the beginning of the previous timestep (stored in
+                  // FNew after the swap at the end of the timestep) in the IBM velocity interpolation.
+                  // Follows approach in Timm's code
+                  return latticeData.GetFNew<LatticeType>(index);
+              } else {
+                  return site.template GetFOld<LatticeType>();
+              }
+        }();
         LatticeType::CalculateDensityAndMomentum(fDistribution,
                                                  force,
                                                  density,
@@ -98,14 +100,16 @@ namespace hemelb::redblood
         using LatticeType = typename KERNEL::LatticeType;
         LatticeMomentum mom;
         distribn_t density;
-#ifdef HEMELB_USE_KRUEGER_ORDERING
-        // Use distribution functions at the beginning of the previous timestep (stored in
-        // FNew after the swap at the end of the timestep) in the IBM velocity interpolation.
-        // Follows approach in Timm's code
-        auto const fDistribution = latticeData.GetFNew<LatticeType>(index);
-#else
-        auto const fDistribution = domainData.GetSite(index).template GetFOld<LatticeType>();
-#endif
+        auto const fDistribution = [&]() {
+            if constexpr (build_info::USE_KRUEGER_ORDERING) {
+                // Use distribution functions at the beginning of the previous timestep (stored in
+                // FNew after the swap at the end of the timestep) in the IBM velocity interpolation.
+                // Follows approach in Timm's code
+                return latticeData.GetFNew<LatticeType>(index);
+            } else {
+                return latticeData.GetSite(index).template GetFOld<LatticeType>();
+            }
+        }();
         LatticeType::CalculateDensityAndMomentum(fDistribution,
                                                  density,
                                                  mom);

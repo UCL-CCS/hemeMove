@@ -64,12 +64,12 @@ namespace hemelb::lb
         {
         }
 
-        void StreamAndCollide(const site_t firstIndex, const site_t siteCount,
+        void StreamAndCollide(const site_t beginIndex, const site_t endIndex,
                               const LbmParameters* lbmParams,
                               geometry::FieldData& latDat,
                               lb::MacroscopicPropertyCache& propertyCache)
         {
-            for (site_t siteIndex = firstIndex; siteIndex < (firstIndex + siteCount); siteIndex++)
+            for (site_t siteIndex = beginIndex; siteIndex < endIndex; ++siteIndex)
             {
                 geometry::Site<geometry::FieldData> site = latDat.GetSite(siteIndex);
                 VarsType hydroVars(site);
@@ -90,7 +90,7 @@ namespace hemelb::lb
             }
         }
 
-        void PostStep(const site_t iFirstIndex, const site_t iSiteCount,
+        void PostStep(const site_t beginIndex, const site_t iSiteCount,
                       const LbmParameters* iLbmParams, geometry::FieldData& bLatDat,
                       lb::MacroscopicPropertyCache& propertyCache)
         {

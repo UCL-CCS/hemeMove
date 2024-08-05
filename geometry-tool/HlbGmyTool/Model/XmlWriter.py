@@ -5,6 +5,7 @@
 
 # import numpy as np
 import os.path
+import string
 from xml.etree.ElementTree import Element, SubElement, ElementTree
 
 # from .Profile import Profile, metre
@@ -12,9 +13,27 @@ from .Iolets import Inlet, Outlet
 from .Vector import Vector
 
 
+class HexFloatFormatter(string.Formatter):
+    """Write floats as hexadecimal unless other requested"""
+
+    def format_field(self, value, format_spec):
+        if isinstance(value, float):
+            if format_spec == "" or format_spec == "x":
+                return value.hex()
+        elif isinstance(value, Vector):
+            return self.format(Vector._FORMAT_STRING, value)
+
+        return format(value, format_spec)
+
+
 class XmlWriter(object):
-    VERSION = 5
-    STRESSTYPE = 1
+    VERSION = 6
+
+    FMT = HexFloatFormatter()
+
+    @classmethod
+    def _totext(cls, value):
+        return cls.FMT.format("{}", value)
 
     def __init__(self, profile):
         self.profile = profile
@@ -42,7 +61,6 @@ class XmlWriter(object):
         self.DoSimulation(root)
         self.DoGeometry(root)
         self.DoIolets(root)
-        self.DoVisualisation(root)
         self.DoInitialConditions(root)
 
         self.indent(root)
@@ -52,16 +70,15 @@ class XmlWriter(object):
 
     def DoSimulation(self, root):
         sim = SubElement(root, "simulation")
-        QuantityElement(sim, "step_length", self.profile.TimeStepSeconds, "s")
-        QuantityElement(
+        self.QuantityElement(sim, "step_length", self.profile.TimeStepSeconds, "s")
+        self.QuantityElement(
             sim,
             "steps",
             round(self.profile.DurationSeconds / self.profile.TimeStepSeconds),
             "lattice",
         )
-        ValueElement(sim, "stresstype", self.STRESSTYPE)
-        QuantityElement(sim, "voxel_size", self.profile.VoxelSizeMetres, "m")
-        QuantityElement(sim, "origin", self.profile.OriginMetres, "m")
+        self.QuantityElement(sim, "voxel_size", self.profile.VoxelSizeMetres, "m")
+        self.QuantityElement(sim, "origin", self.profile.OriginMetres, "m")
         return
 
     def DoGeometry(self, root):
@@ -79,7 +96,7 @@ class XmlWriter(object):
     def DoInitialConditions(self, root):
         ic = SubElement(root, "initialconditions")
         pressure = SubElement(ic, "pressure")
-        QuantityElement(pressure, "uniform", 0.0, "mmHg")
+        self.QuantityElement(pressure, "uniform", 0.0, "Pa")
         return
 
     def DoProperties(self, root):
@@ -104,12 +121,12 @@ class XmlWriter(object):
             condition = SubElement(
                 iolet, "condition", type="pressure", subtype="cosine"
             )
-            QuantityElement(condition, "mean", io.Pressure.x, "mmHg")
-            QuantityElement(condition, "amplitude", io.Pressure.y, "mmHg")
-            QuantityElement(condition, "phase", io.Pressure.z, "rad")
-            QuantityElement(condition, "period", 1, "s")
+            self.QuantityElement(condition, "mean", io.Pressure.x, "Pa")
+            self.QuantityElement(condition, "amplitude", io.Pressure.y, "Pa")
+            self.QuantityElement(condition, "phase", io.Pressure.z, "rad")
+            self.QuantityElement(condition, "period", 1, "s")
 
-            QuantityElement(iolet, "normal", io.Normal, "dimensionless")
+            self.QuantityElement(iolet, "normal", io.Normal, "dimensionless")
 
             # Scale the centre to metres
             centre = Vector()
@@ -120,33 +137,9 @@ class XmlWriter(object):
                     getattr(io.Centre, dim) * self.profile.StlFileUnit.SizeInMetres,
                 )
 
-            QuantityElement(iolet, "position", centre, "m")
+            self.QuantityElement(iolet, "position", centre, "m")
             continue
         return
 
-    def DoVisualisation(self, root):
-        vis = SubElement(root, "visualisation")
-
-        QuantityElement(vis, "centre", Vector(0.0, 0.0, 0.0), "m")
-
-        orientation = SubElement(vis, "orientation")
-        QuantityElement(orientation, "longitude", 45.0, "deg")
-        QuantityElement(orientation, "latitude", 45.0, "deg")
-
-        display = SubElement(vis, "display", zoom="1.0", brightness="0.03")
-
-        range = SubElement(vis, "range")
-        QuantityElement(range, "maxvelocity", 0.1, "m/s")
-        QuantityElement(range, "maxstress", 0.1, "Pa")
-
-        return
-
-    pass
-
-
-def ValueElement(parent, name, value):
-    return SubElement(parent, name, value=str(value))
-
-
-def QuantityElement(parent, name, value, units):
-    return SubElement(parent, name, value=str(value), units=units)
+    def QuantityElement(self, parent, name, value, units):
+        return SubElement(parent, name, value=self._totext(value), units=units)

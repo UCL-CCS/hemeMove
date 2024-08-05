@@ -95,7 +95,6 @@ namespace hemelb::lb
           }
           /***
            * Carry out communication necessary
-           * @param isIoProcess Is the process the master process?
            */
           virtual void DoComms(const BoundaryCommunicator& bcComms, const LatticeTimeStep timeStep);
 

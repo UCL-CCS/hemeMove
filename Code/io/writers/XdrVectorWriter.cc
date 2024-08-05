@@ -11,9 +11,9 @@ namespace hemelb::io
 	// First function obj makes a std::vector<char>
 	// Second one creates a std::back_insert_iterator from it
 	XdrVectorWriter::XdrVectorWriter() : base([](){
-						    return char_vec{};
+						    return byte_vec{};
 						  },
-						  [](char_vec& v){
+						  [](byte_vec& v){
 						    return std::back_inserter(v);
 						  })
 	{
@@ -24,7 +24,7 @@ namespace hemelb::io
 	  res.reserve(n);
 	}
 
-	const char_vec& XdrVectorWriter::GetBuf() const
+	const byte_vec& XdrVectorWriter::GetBuf() const
 	{
 	  return res;
 	}

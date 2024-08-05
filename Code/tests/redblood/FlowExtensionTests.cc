@@ -4,8 +4,9 @@
 // license in the file LICENSE.
 
 #include <catch2/catch.hpp>
-#include <tinyxml.h>
+#include <tinyxml2.h>
 
+#include "configuration/SimConfigReader.h"
 #include "redblood/FlowExtension.h"
 #include "util/Vector3D.h"
 #include "units.h"
@@ -91,21 +92,24 @@ namespace hemelb::tests
 	REQUIRE(approx(1e0) == linearWeight(flow, LatticePosition(0.5, 0.5, 1.0 - 1e-8)));
       }
 
-      SECTION("testReadFromXML") {
-	TiXmlDocument doc;
-	doc.Parse("<inlet>"
-		  "  <normal units=\"dimensionless\" value=\"(0.0,1.0,1.0)\" />"
-		  "  <position units=\"m\" value=\"(0.1,0.2,0.3)\" />"
-		  "  <flowextension>"
-		  "    <length units=\"m\" value=\"0.1\" />"
-		  "    <radius units=\"m\" value=\"0.01\" />"
-		  "    <fadelength units=\"m\" value=\"0.05\" />"
-		  "  </flowextension>"
-		  "</inlet>");
+        SECTION("testReadFromXML") {
+            tinyxml2::XMLDocument doc;
+            doc.Parse("<inlet>"
+                      "  <normal units=\"dimensionless\" value=\"(0.0,1.0,1.0)\" />"
+                      "  <position units=\"m\" value=\"(0.1,0.2,0.3)\" />"
+                      "  <flowextension>"
+                      "    <length units=\"m\" value=\"0.1\" />"
+                      "    <radius units=\"m\" value=\"0.01\" />"
+                      "    <fadelength units=\"m\" value=\"0.05\" />"
+                      "  </flowextension>"
+                      "</inlet>");
             auto converter = std::make_shared<util::UnitConverter>(0.5, 0.6, PhysicalPosition{0.7}, DEFAULT_FLUID_DENSITY_Kg_per_m3, 0.0);
-            auto conf = UninitSimConfig("ignored.xml");
+
+            configuration::SimConfig conf;
+            configuration::SimConfigReader reader("ignored.xml");
             configuration::CosinePressureIoletConfig iolet_conf;
-            conf.DoIOForBaseInOutlet(doc.FirstChildElement("inlet"), iolet_conf);
+            io::xml::Element inletEl = doc.FirstChildElement("inlet");
+            reader.DoIOForBaseInOutlet(conf.GetSimInfo(), inletEl, iolet_conf);
 
             auto fe_conf = iolet_conf.flow_extension;
             REQUIRE(fe_conf.has_value());

@@ -3,4 +3,11 @@
 # file AUTHORS. This software is provided under the terms of the
 # license in the file LICENSE.
 
-add_library(hemelb_configuration OBJECT CommandLine.cc SimConfig.cc SimBuilder.cc)
+add_library(hemelb_configuration OBJECT
+        CommandLine.cc
+        PathManager.cc
+        SimConfig.cc
+        SimBuilder.cc
+        SimConfigReader.cc
+        SimConfigWriter.cc
+        )

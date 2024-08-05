@@ -8,18 +8,16 @@
 
 #include "extraction/IterableDataSource.h"
 #include "extraction/PropertyOutputFile.h"
+#include "io/TimePattern.h"
 #include "lb/Lattices.h"
 #include "net/mpi.h"
+#include "net/IOCommunicator.h"
 #include "net/MpiFile.h"
 
-namespace hemelb
+namespace hemelb::net { class IOCommunicator; }
+
+namespace hemelb::extraction
 {
-  namespace net
-  {
-    class IOCommunicator;
-  }
-  namespace extraction
-  {
     // Stores sufficient information to output property information
     // from this core.
     class LocalPropertyOutput
@@ -27,8 +25,8 @@ namespace hemelb
     public:
       // Initialises a LocalPropertyOutput. Required so we can use
       // const reference types. Collective on the communicator.
-      LocalPropertyOutput(IterableDataSource& dataSource, const PropertyOutputFile& outputSpec,
-			  const net::IOCommunicator& ioComms);
+      LocalPropertyOutput(std::shared_ptr<IterableDataSource> dataSource, const PropertyOutputFile& outputSpec,
+			  net::IOCommunicator ioComms);
 
       // True if this property output should be written on the current iteration.
       bool ShouldWrite(unsigned long timestepNumber) const;
@@ -37,14 +35,24 @@ namespace hemelb
       const PropertyOutputFile& GetOutputSpec() const;
 
       // Write this core's section of the data file. Only writes if
-      // appropriate for the current iteration number
-      void Write(unsigned long timestepNumber, unsigned long totalSteps);
+      // appropriate for the current iteration number.
+      // Returns the path of the written file, iff writing occurred.
+      std::optional<std::filesystem::path>
+      Write(unsigned long timestepNumber, unsigned long totalSteps);
+
+      inline std::string const& GetOffsetFileName() const {
+          return offset_file_name;
+      }
 
       // Write the offset file. Collective on the communicator.
       void WriteOffsetFile();
 
       // Returns the number of items written for the field.
       unsigned GetFieldLength(source::Type) const;
+
+      auto OnIORank() const {
+          return comms.OnIORank();
+      }
 
     private:
       // How many sites does this MPI process write?
@@ -54,23 +62,23 @@ namespace hemelb
       std::uint64_t CalcSiteWriteLen(std::vector<OutputField> const& fields) const;
 
       // Make the XTR header
-      std::vector<char> PrepareHeader() const;
+      std::vector<std::byte> PrepareHeader() const;
 
       // Open the file specified and write the header. Collective.
       void StartFile(std::string const& fn);
 
       // Our communicator
-      const net::IOCommunicator& comms;
+      net::IOCommunicator comms;
 
       // For single-timestep-per-file mode, hold the pattern we'll
       // pass to printf.
-      std::string output_file_pattern;
+      io::TimePattern output_file_pattern;
 
       // The MPI file to write into.
       net::MpiFile outputFile;
 
       // The data source to use for file output.
-      IterableDataSource& dataSource;
+      std::shared_ptr<IterableDataSource> dataSource;
 
       // PropertyOutputFile spec.
       PropertyOutputFile outputSpec;
@@ -82,7 +90,7 @@ namespace hemelb
       // The length, in bytes, of the whole header
       std::uint64_t header_length;
       // The data that makes up the header (only used on rank 0)
-      std::vector<char> header_data;
+      std::vector<std::byte> header_data;
 
       // The length, in bytes, of the local/global data write for one timestep
       std::uint64_t local_data_write_length;
@@ -92,12 +100,11 @@ namespace hemelb
       std::uint64_t local_write_start;
 
       // Buffer to serialise into before writing to disk.
-      std::vector<char> buffer;
+      std::vector<std::byte> buffer;
 
-      // The MPI file to write the offsets into.
+      // The file to write the offsets into.
       std::string offset_file_name;
     };
-  }
 }
 
 #endif // HEMELB_EXTRACTION_LOCALPROPERTYOUTPUT_H

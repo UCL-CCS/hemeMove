@@ -9,7 +9,7 @@
 #include "net/PhasedBroadcast.h"
 
 namespace hemelb::net
-  {
+{
     /**
      * PhasedBroadcastRegular - a class for performing phased broadcasts starting at regular
      * intervals. A longer description is given in PhasedBroadcast.h.
@@ -176,7 +176,7 @@ namespace hemelb::net
         {
           if (base::GetTreeDepth() > 0)
           {
-            unsigned long stepsPassed = base::mSimState->Get0IndexedTimeStep();
+            unsigned long stepsPassed = base::mSimState->GetTimeStepsElapsed();
 
             return stepsPassed % base::GetRoundTripLength();
           }
@@ -287,6 +287,6 @@ namespace hemelb::net
 
         }
     };
-  }
+}
 
 #endif /* HEMELB_NET_PHASEDBROADCASTREGULAR_H */

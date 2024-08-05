@@ -8,12 +8,12 @@
 
 #include "redblood/Cell.h"
 #include "tests/redblood/Fixtures.h"
-#include "SimulationMaster.h"
+#include "tests/helpers/FolderTestFixture.h"
+#include "SimulationController.h"
+#include "configuration/SimBuilder.h"
 
-namespace hemelb
+namespace hemelb::tests
 {
-  namespace tests
-  {
     //! \brief gathers mid-domain and egde positions from all procs
     //! \details If there are insufficient number of edges, mid-domains are used instead.
     //! erase removes the components from the first process.
@@ -22,22 +22,43 @@ namespace hemelb
 						      net::MpiCommunicator const &c);
 
     //! Make some functionality available
-    template<class TRAITS>
-    class OpenedSimulationMaster : public SimulationMaster<TRAITS>
+    class OpenedSimulationController : public SimulationController
     {
     public:
-      using SimulationMaster<TRAITS>::SimulationMaster;
-      using SimulationMaster<TRAITS>::Finalise;
+        //using SimulationController::SimulationController;
+        using SimulationController::Finalise;
+        OpenedSimulationController(SimulationController&& src) : SimulationController(src) {
+        }
 
-      void DoTimeStep()
-      {
-	SimulationMaster<TRAITS>::DoTimeStep();
-      }
+        void DoTimeStep()
+        {
+            SimulationController::DoTimeStep();
+        }
 
-      std::shared_ptr<hemelb::configuration::SimConfig> GetSimConfig()
-      {
-	return this->simConfig;
-      }
+        configuration::SimConfig const& GetSimConfig()
+        {
+            return this->simConfig;
+        }
+    };
+
+    class OpenSimFixture : public helpers::FolderTestFixture {
+    protected:
+        template <typename STENCIL>
+        using MyTraits = Traits<
+                lb::DefaultLattice, lb::GuoForcingLBGK, lb::Normal,
+                lb::DefaultStreamer, lb::DefaultWallStreamer, lb::DefaultInletStreamer, lb::DefaultOutletStreamer,
+                STENCIL
+        >;
+
+        std::shared_ptr<configuration::CommandLine> options;
+        template<class STENCIL>
+        [[nodiscard]] auto CreateSim(net::IOCommunicator const &comm) const {
+            using T = MyTraits<STENCIL>;
+            auto tmp =  configuration::SimBuilder::CreateSim<T>(
+                    *options, comm
+            );
+            return std::unique_ptr<OpenedSimulationController>(new OpenedSimulationController(std::move(*tmp)));
+        }
     };
 
     class DummyCell : public NodeCell {
@@ -65,7 +86,6 @@ namespace hemelb
 											     net::MpiCommunicator const &c, size_t nCells);
 
     net::MpiCommunicator CreateDumbGraphComm(net::MpiCommunicator const &comm);
-  }
 }
 
 #endif  // ONCE

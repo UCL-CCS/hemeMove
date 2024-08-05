@@ -21,6 +21,7 @@ import numpy as np
 from .generic import NdIndexConverter, Domain, Block, OutOfDomainBlock, AllSolidBlock
 from .freeing import FreeingConfigLoader
 
+
 # Simple method for doing logging here. Use the multiprocessing logger
 # by default.
 def GetLogger():

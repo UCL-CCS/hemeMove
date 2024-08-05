@@ -311,11 +311,12 @@ namespace hemelb::tests
 
 	//KERNEL kernel(initParams);
 	VelocityFromLatticeData<KERNEL> velocityFunctor(*latDat);
-	size_t const N(dom->GetMidDomainCollisionCount(0));
+    auto [begin, end] = dom->GetMidDomainSiteRange(0);
+    auto const N = end - begin;
 
 	REQUIRE(N > 0);
 
-	for (size_t index(0); index < N; ++index) {
+	for (auto index = begin; index < end; ++index) {
 	  geometry::Site<geometry::FieldData const> const site(index, *latDat);
 
 	  // Value to test
@@ -352,9 +353,9 @@ namespace hemelb::tests
 	velocityFromLatticeDataTester(kernel, false);
       }
       SECTION("VelocityDataFromLatticeWithForces") {
-	size_t const N = dom->GetMidDomainCollisionCount(0);
+            auto [begin, end] = dom->GetMidDomainSiteRange(0);
 
-	for (size_t i = 0; i < N; ++i)
+	for (size_t i = begin; i < end; ++i)
 	  latDat->GetSite(i).SetForce(LatticeForceVector(i, 2 * i, double(i * i) * 0.0001));
 
 	GuoForcingLBGK kernel{initParams};

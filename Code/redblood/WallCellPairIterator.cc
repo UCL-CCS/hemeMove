@@ -6,10 +6,8 @@
 #include <vector>
 #include "redblood/WallCellPairIterator.h"
 
-namespace hemelb
+namespace hemelb::redblood
 {
-  namespace redblood
-  {
     bool WallCellPairIterator::operator++()
     {
       do
@@ -51,14 +49,19 @@ namespace hemelb
           and (*firstCellNode - firstWallNode->second.node).GetMagnitude() < cutoff;
     }
 
-    std::tuple<DivideConquerCells const&, DivideConquer<hemelb::redblood::WallNode> const&,
-        hemelb::LatticeDistance> iterate(
-        hemelb::redblood::DivideConquerCells const& cellDnC,
-        hemelb::redblood::DivideConquer<hemelb::redblood::WallNode> const& wallDnC,
-        hemelb::LatticeDistance const & cutoff)
+    WallCellPairIterationRange iterate(
+            DivideConquerCells const& cellDnC,
+            DivideConquer<WallNode> const& wallDnC,
+            LatticeDistance const & cutoff)
     {
-      using namespace hemelb::redblood;
-      return std::make_tuple(std::cref(cellDnC), std::cref(wallDnC), cutoff);
+        return {&cellDnC, &wallDnC, cutoff};
+    }
+
+    WallCellPairIterator WallCellPairIterationRange::begin() {
+        return {*cellDnC, *wallDnC, cutoff, WallCellPairIterator::Begin()};
+    }
+    WallCellPairIterator WallCellPairIterationRange::end() {
+        return {*cellDnC, *wallDnC, cutoff, WallCellPairIterator::End()};
     }
 
     WallCellPairIterator::WallCellPairIterator(
@@ -94,29 +97,4 @@ namespace hemelb
         throw;
       }
     }
-  }
-} // namespace hemelb::redblood
-
-namespace std
-{
-  //! Overload so we can work with for-range loop
-  hemelb::redblood::WallCellPairIterator begin(
-      tuple<hemelb::redblood::DivideConquerCells const&,
-          hemelb::redblood::DivideConquer<hemelb::redblood::WallNode> const&,
-          hemelb::LatticeDistance> args)
-  {
-    using namespace hemelb::redblood;
-    return
-    { get<0>(args), get<1>(args), get<2>(args), WallCellPairIterator::Begin()};
-  }
-
-  hemelb::redblood::WallCellPairIterator end(
-      tuple<hemelb::redblood::DivideConquerCells const&,
-          hemelb::redblood::DivideConquer<hemelb::redblood::WallNode> const&,
-          hemelb::LatticeDistance> args)
-  {
-    using namespace hemelb::redblood;
-    return
-    { get<0>(args), get<1>(args), get<2>(args), WallCellPairIterator::End()};
-  }
-} // std
+}

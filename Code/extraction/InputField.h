@@ -25,6 +25,10 @@ namespace hemelb
       // distributions) without an offset, so just omit.
       //
       // std::vector<T> offsets;
+
+      // Also have a scale factor from written lattice units -> physical.
+      // Again, we are dealing with distributions in lattice units so omit.
+      // T scale;
     };
   }
 }

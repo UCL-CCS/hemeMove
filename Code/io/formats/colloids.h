@@ -32,7 +32,7 @@ namespace hemelb
          *
          * Body consists of one record per voxel
          * 3 x uint     Voxel index
-         * 1 x float   Pressure (mmHg)
+         * 1 x float   Pressure (Pa)
          * 3 x float   Velocity (m/s)
          * 1 x float   von Mises stress (Pa). Note this is NaN for non-wall sites
          * Record length = 32 bytes

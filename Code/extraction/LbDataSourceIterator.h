@@ -7,15 +7,15 @@
 #define HEMELB_EXTRACTION_LBDATASOURCEITERATOR_H
 
 #include "extraction/IterableDataSource.h"
-#include "geometry/FieldData.h"
 #include "lb/MacroscopicPropertyCache.h"
 #include "util/UnitConverter.h"
 
+namespace hemelb::geometry { class FieldData; }
 namespace hemelb::extraction
 {
     class LbDataSourceIterator : public IterableDataSource
     {
-      public:
+    public:
 
         /**
          * Constructs an iterator using the LBM as a source.
@@ -81,13 +81,13 @@ namespace hemelb::extraction
          * Returns the traction vector at a wall site (i.e. stress tensor times surface normal).
          * @return traction vector
          */
-        [[nodiscard]] util::Vector3D<PhysicalStress> GetTraction() const override;
+        [[nodiscard]] util::Vector3D<LatticeStress> GetTraction() const override;
 
         /**
          * Returns the projection of the traction vector on the tangential plane of a wall site.
          * @return projected traction vector
          */
-        [[nodiscard]] util::Vector3D<PhysicalStress> GetTangentialProjectionTraction() const override;
+        [[nodiscard]] util::Vector3D<LatticeStress> GetTangentialProjectionTraction() const override;
 
         /**
          * Returns a pointer to the velocity distribution of a site.
@@ -120,6 +120,9 @@ namespace hemelb::extraction
          * @return
          */
         [[nodiscard]] PhysicalDistance GetVoxelSize() const override;
+        [[nodiscard]] PhysicalTime GetTimeStep() const override;
+        [[nodiscard]] PhysicalMass GetMassScale() const override;
+        [[nodiscard]] PhysicalPressure GetReferencePressure() const override;
 
         /**
          * Returns the origin of the geometry in real, spatial units.

@@ -46,7 +46,12 @@ namespace hemelb
         ;
     };
 
-    /** container for all body forces currently active in the simulation */
+    /**
+     * Container for all body forces currently active in the simulation
+     *
+     * TODO: Rewrite. This class is horrible as it effectively is just a bundle of
+     * global variables.
+     */
     class BoundaryConditions
     {
       public:

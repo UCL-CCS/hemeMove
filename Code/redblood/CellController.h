@@ -28,18 +28,19 @@ namespace hemelb::redblood
           using namespace log;
           Logger::Log<Debug, Singleton>("Cell insertion");
           CellArmy<TRAITS>::CallCellInsertion();
-#ifdef HEMELB_USE_KRUEGER_ORDERING
-          Logger::Log<Debug, Singleton>("Cell interaction with fluid");
-          CellArmy<TRAITS>::Cell2FluidInteractions();
-          Logger::Log<Debug, Singleton>("Fluid interaction with cells");
-          CellArmy<TRAITS>::Fluid2CellInteractions();
-#else
-          Logger::Log<Debug, Singleton>("Fluid interaction with cells");
-          CellArmy<TRAITS>::Fluid2CellInteractions();
-          Logger::Log<Debug, Singleton>("Cell interaction with fluid");
-          CellArmy<TRAITS>::Cell2FluidInteractions();
-#endif
+          if constexpr (build_info::USE_KRUEGER_ORDERING) {
+              Logger::Log<Debug, Singleton>("Cell interaction with fluid");
+              CellArmy<TRAITS>::Cell2FluidInteractions();
+              Logger::Log<Debug, Singleton>("Fluid interaction with cells");
+              CellArmy<TRAITS>::Fluid2CellInteractions();
+          } else {
+              Logger::Log<Debug, Singleton>("Fluid interaction with cells");
+              CellArmy<TRAITS>::Fluid2CellInteractions();
+              Logger::Log<Debug, Singleton>("Cell interaction with fluid");
+              CellArmy<TRAITS>::Cell2FluidInteractions();
+          }
         }
+
         void EndIteration() override
         {
           using namespace log;

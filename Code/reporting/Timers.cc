@@ -4,11 +4,10 @@
 // license in the file LICENSE.
 
 #include "reporting/Timers.hpp"
-namespace hemelb
+
+namespace hemelb::reporting
 {
-  namespace reporting
-  {
-    template class TimersBase<HemeLBClockPolicy, MPICommsPolicy> ;
-  // explicit instantiate
-  }
+    // Explicit instantiations
+    template class TimersBase<HemeLBClockPolicy>;
+    template void TimersBase<HemeLBClockPolicy>::Reduce<net::IOCommunicator&>(net::IOCommunicator&);
 }

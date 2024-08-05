@@ -7,7 +7,7 @@
 
 #include "resources/Resource.h"
 #include "multiscale/mpwide/MPWideIntercommunicator.h"
-#include "multiscale/MultiscaleSimulationMaster.h"
+#include "multiscale/MultiscaleSimulationController.h"
 
 #include "tests/helpers/FolderTestFixture.h"
 #include "tests/multiscale/MockIntercommunicand.h"
@@ -66,8 +66,8 @@ namespace hemelb
 	  std::string configPath = "../../../config_files/MPWSettings.cfg";
 	  MPWideIntercommunicator intercomms(Comms().OnIORank(), *pbuffer, *LBorchestration, configPath);
 
-	  MultiscaleSimulationMaster<MPWideIntercommunicator> heme(options, Comms(), intercomms);
-	  // Mock out the behaviour of the simulation master iteration, but with the other model linked in.
+	  MultiscaleSimulationController<MPWideIntercommunicator> heme(options, Comms(), intercomms);
+	  // Mock out the behaviour of the simulation iteration, but with the other model linked in.
 	  //std::cout << "HemeLB about to be run..." << std::endl;
 	  while (heme.GetState()->GetTime() < 20.0) {
 	    heme.DoTimeStep();

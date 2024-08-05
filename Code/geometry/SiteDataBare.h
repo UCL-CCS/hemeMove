@@ -14,30 +14,31 @@ namespace hemelb::geometry
 {
     class SiteData
     {
-      public:
+    public:
         SiteData(const GeometrySite& siteReadResult);
-        SiteData(const SiteData& other);
-        SiteData(); //default constructor allows one to use operator[] for maps
-        ~SiteData();
+        // Default constructor allows one to use operator[] for maps
+        SiteData() = default;
 
         bool IsWall() const;
         bool IsSolid() const;
         unsigned GetCollisionType() const;
 
-        SiteType GetSiteType() const
-        {
-          return type;
-        }
-        SiteType& GetSiteType()
+        inline SiteType GetSiteType() const
         {
           return type;
         }
 
-        int GetIoletId() const
+        inline SiteType& GetSiteType()
+        {
+          return type;
+        }
+
+        inline int GetIoletId() const
         {
           return ioletId;
         }
-        int& GetIoletId()
+
+        inline int& GetIoletId()
         {
           return ioletId;
         }
@@ -49,29 +50,29 @@ namespace hemelb::geometry
          * These functions return internal representations and should only be used for debugging.
          */
         uint32_t GetIoletIntersectionData() const;
-        uint32_t &GetIoletIntersectionData()
+        inline uint32_t &GetIoletIntersectionData()
         {
           return ioletIntersection;
         }
         uint32_t GetWallIntersectionData() const;
-        uint32_t &GetWallIntersectionData()
+        inline uint32_t &GetWallIntersectionData()
         {
           return wallIntersection;
         }
 
-      protected:
+    protected:
         /**
          * This is a bit mask for whether a wall is hit by links in each direction.
          */
-        uint32_t wallIntersection;
+        uint32_t wallIntersection = 0U;
 
         /**
          * This is a bit mask for whether an iolet is hit by links in each direction.
          */
-        uint32_t ioletIntersection;
+        uint32_t ioletIntersection = 0U;
 
-        SiteType type;
-        int ioletId;
+        SiteType type = SOLID_TYPE;
+        int ioletId = -1;
     };
 }
 

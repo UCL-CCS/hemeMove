@@ -9,19 +9,26 @@
 #include <string>
 
 #include "io/xml.h"
-#include "configuration/SimConfig.h"
+#include "configuration/SimConfigReader.h"
 #include "configuration/SimBuilder.h"
 
 namespace hemelb::tests::helpers
 {
     // TODO: Figure out what this is supposed to be.
-    class OneInOneOutSimConfig : public configuration::SimConfig
+    class OneInOneOutSimConfigReader : public configuration::SimConfigReader
     {
     public:
-        OneInOneOutSimConfig();
-    protected:
+        OneInOneOutSimConfigReader();
         void CheckIoletMatchesCMake(const io::xml::Element& ioletEl,
-                                    const std::string& requiredBC) const override;
+                                    std::string_view requiredBC) const override;
+
+        [[nodiscard]] configuration::SimConfig Read() const override;
+        [[nodiscard]] configuration::GlobalSimInfo
+        DoIOForSimulation(const io::xml::Element simEl) const override;
+        [[nodiscard]] configuration::ICConfig DoIOForInitialConditions(io::xml::Element parent) const override;
+        [[nodiscard]] std::vector<configuration::IoletConfig>
+        DoIOForInOutlets(configuration::GlobalSimInfo const& sim_info, const io::xml::Element xmlNode) const override;
+
     };
 
 }

@@ -85,7 +85,6 @@ int main(int argc, char const *argv[])
   std::string const output(get_output(args));
 
   Mesh result = tetrahedron(depth);
-  util::UnitConverter conv{1.0, 1.0, PhysicalPosition::Zero(), 1.0, 0.0};
 
   auto io = [&]() -> std::unique_ptr<MeshIO> {
     if (dovtk) {
@@ -95,9 +94,9 @@ int main(int argc, char const *argv[])
   }();
 
   if (output != "") {
-    io->writeFile(output, *result.GetData(), conv);
+    io->writeFile(output, *result.GetData(), nullptr);
   } else {
-    std::cout << io->writeString(*result.GetData(), conv);
+    std::cout << io->writeString(*result.GetData(), nullptr);
   }
 
   return 0;

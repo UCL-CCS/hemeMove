@@ -7,7 +7,6 @@
 #define HEMELB_LB_MACROSCOPICPROPERTYCACHE_H
 
 #include <vector>
-#include "geometry/Domain.h"
 #include "lb/SimulationState.h"
 #include "units.h"
 #include "util/RefreshableCache.hpp"

@@ -6,83 +6,31 @@
 #ifndef HEMELB_CONFIGURATION_SIMCONFIG_H
 #define HEMELB_CONFIGURATION_SIMCONFIG_H
 
+#include <filesystem>
+#include <map>
+#include <memory>
 #include <optional>
+#include <string>
 #include <variant>
 #include <vector>
 
-#include "configuration/MonitoringConfig.h"
-#include "util/Vector3D.h"
-#include "lb/LbmParameters.h"
-#include "lb/iolets/InOutLets.h"
-#include "extraction/GeometrySelectors.h"
-#include "extraction/PropertyOutputFile.h"
-#include "io/xml.h"
+#include "constants.h"
 #include "quantity.h"
+#include "units.h"
+#include "configuration/MonitoringConfig.h"
+#include "lb/LbmParameters.h"
+#include "util/Vector3D.h"
+#include "extraction/PropertyOutputFile.h"
+
+namespace hemelb::io {
+    class Checkpointer;
+    namespace xml {
+        class Document;
+    }
+}
 
 namespace hemelb::configuration
 {
-    // Note on specifying physical quantities.
-    //
-    // In the XML, these are encoded in attributes of an element (the name
-    // of the element doesn't matter for these purposes). The two required
-    // attributes are:
-    // 1. "units" (e.g. "m" for a physical length or "lattice" for something specified in scaled units)
-    // 2. "value" which is a string encoding of the representation (typically a double)
-    //
-    // Now some parts of the code (e.g. RBC) can specify units as multiple options (e.g. physical OR lattice)
-    // for these, use the quantity union types. The consumer (i.e. SimBuilder etc) will have
-    // to take care around this.
-    inline void check_unit_spec(const io::xml::Element& elem, std::string_view actual, std::string_view const& expected) {
-        if (actual != expected)
-            throw Exception() << "Invalid units for element " << elem.GetPath()
-                              << "."" Expected '" << expected
-                              << "', got '" << actual << "'";
-    }
-
-    //! Check the units of the quantity and decode the value into @param value
-    template<typename T>
-    void GetDimensionalValue(const io::xml::Element& elem, std::string_view units, T& value)
-    {
-        auto got = elem.GetAttributeOrThrow("units");
-        check_unit_spec(elem, got, units);
-        elem.GetAttributeOrThrow("value", value);
-    }
-    //! Check the units of the quantity and return the value
-    template<typename T>
-    T GetDimensionalValue(const io::xml::Element& elem, std::string_view units)
-    {
-        auto got = elem.GetAttributeOrThrow("units");
-        check_unit_spec(elem, got, units);
-
-        return elem.GetAttributeOrThrow<T>("value");
-    }
-
-    //! Given an element (@param elem), check for a child with the given @param name.
-    //! If it exists, return the unit-checked (against @param unit) value.
-    //! If it doesn't exist, return @param default_value.
-    template <typename T>
-    T GetDimensionalValueWithDefault(const io::xml::Element& elem,
-                                     std::string_view name, std::string_view unit, T default_value) {
-        return elem
-                .and_then([&](const io::xml::Element& _) { return _.GetChildOrNull(name); })
-                .transform([&](const io::xml::Element& _) { return GetDimensionalValue<T>(_, unit); })
-                .value_or(default_value);
-    }
-
-    template <QuantityUnion QUnion, IsVariantAlternative<QUnion> DefaultQ>
-    QUnion GetDimensionalValueWithDefault(const io::xml::Element& elem, std::string_view name, DefaultQ const& default_q) {
-        using RepT = typename quantity_union_traits<QUnion>::representation_type;
-        using io::xml::Element;
-        return elem
-            .and_then([&](Element const& _) { return _.GetChildOrNull(name); })
-            .transform([](Element const& _) {
-                auto xml_units = _.GetAttributeOrThrow("units");
-                auto xml_val = _.GetAttributeOrThrow<RepT>("value");
-                return quantity_union_factory<QUnion>()(xml_val, xml_units);
-            })
-            .value_or(default_q);
-    }
-
     // Base for initial conditions configuration
     struct ICConfigBase {
       ICConfigBase(std::optional<LatticeTimeStep> t);
@@ -93,7 +41,7 @@ namespace hemelb::configuration
     struct EquilibriumIC : ICConfigBase {
       EquilibriumIC(std::optional<LatticeTimeStep> t, PhysicalPressure p);
       EquilibriumIC(std::optional<LatticeTimeStep> t, PhysicalPressure p, const PhysicalVelocity& v);
-      PhysicalPressure p_mmHg;
+      PhysicalPressure p_Pa;
       PhysicalVelocity v_ms;
     };
 
@@ -108,27 +56,31 @@ namespace hemelb::configuration
     using ICConfig = std::variant<std::monostate, EquilibriumIC, CheckpointIC>;
 
     struct TimeInfo {
-        std::uint64_t total_steps;
-        std::uint64_t warmup_steps;
-        PhysicalTime step_s;
+        std::uint64_t total_steps = 0;
+        std::uint64_t warmup_steps = 0;
+        PhysicalTime step_s = 0.0;
     };
 
     struct SpaceInfo {
-        PhysicalDistance step_m;
-        PhysicalPosition geometry_origin_m;
+        PhysicalDistance step_m = 0;
+        PhysicalPosition geometry_origin_m = {0.0, 0.0, 0.0};
     };
 
     struct FluidInfo {
-        PhysicalDensity density_kgm3;
-        PhysicalDynamicViscosity viscosity_Pas;
-        PhysicalPressure reference_pressure_mmHg;
+        PhysicalDensity density_kgm3 = DEFAULT_FLUID_DENSITY_Kg_per_m3;
+        PhysicalDynamicViscosity viscosity_Pas = DEFAULT_FLUID_VISCOSITY_Pas;
+        PhysicalPressure reference_pressure_Pa = 0.0;
+    };
+
+    struct CheckpointInfo {
+        LatticeTimeStep period;
     };
 
     struct GlobalSimInfo {
-        lb::StressTypes stress_type;
         TimeInfo time;
         SpaceInfo space;
         FluidInfo fluid;
+        std::optional<CheckpointInfo> checkpoint;
     };
 
     struct FlowExtensionConfig {
@@ -139,8 +91,11 @@ namespace hemelb::configuration
         PhysicalPosition origin_m;
     };
 
+    // Using std::minstd_rand with a 32 bit unsigned seed/state.
+    using PrngSeedType = std::uint32_t;
+
     struct CellInserterConfig {
-        std::int64_t seed;
+        PrngSeedType seed;
         std::string template_name;
         quantity_union<double, "s", "lattice"> offset;
         Angle theta_rad;
@@ -168,9 +123,9 @@ namespace hemelb::configuration
 
     struct CosinePressureIoletConfig : PressureIoletConfig {
         // Note pressure difference
-        PhysicalPressure amp_mmHg;
+        PhysicalPressure amp_Pa;
         // Note absolute pressure
-        PhysicalPressure mean_mmHg;
+        PhysicalPressure mean_Pa;
         Angle phase_rad;
         PhysicalTime period_s;
     };
@@ -180,7 +135,7 @@ namespace hemelb::configuration
     };
 
     struct MultiscalePressureIoletConfig : PressureIoletConfig {
-        PhysicalPressure pressure_reference_mmHg;
+        PhysicalPressure pressure_reference_Pa;
         PhysicalVelocity velocity_reference_ms;
         std::string label;
     };
@@ -195,7 +150,7 @@ namespace hemelb::configuration
 
     struct WomersleyVelocityIoletConfig : VelocityIoletConfig {
         PhysicalDistance radius_m;
-        PhysicalPressureGradient pgrad_amp_mmHgm;
+        PhysicalPressureGradient pgrad_amp_Pam;
         PhysicalTime period_s;
         double womersley;
     };
@@ -243,34 +198,32 @@ namespace hemelb::configuration
         std::size_t exponent;
     };
 
+    struct CellOutputConfig {
+        LatticeTimeStep output_period;
+        bool physical_units = false;
+    };
+
     struct RBCConfig {
         LatticeDistance boxSize;
         std::map<std::string, TemplateCellConfig> meshes;
         NodeForceConfig cell2cell;
         NodeForceConfig cell2wall;
-        LatticeTimeStep output_period;
+        std::optional<CellOutputConfig> full_output;
+        std::optional<CellOutputConfig> summary_output;
     };
 
     class SimConfig
     {
         friend class SimBuilder;
-      public:
+        friend class SimConfigReader;
+friend class io::Checkpointer;
+    public:
         using path = std::filesystem::path;
+        static SimConfig New(const path& p);
 
-        static std::unique_ptr<SimConfig> New(const path& p);
-
-      protected:
-    	explicit SimConfig(const path& p);
-        void Init();
-
-      public:
-        virtual ~SimConfig() = default;
-
-        // Turn an input XML-relative path into a full path
-        [[nodiscard]] path RelPathToFullPath(std::string_view path) const;
-
-        void Save(std::string path); // TODO this method should be able to be CONST
-        // but because it uses DoIo, which uses one function signature for both reading and writing, it cannot be.
+        inline GlobalSimInfo const& GetSimInfo() const {
+            return sim_info;
+        }
 
         const std::vector<IoletConfig> & GetInlets() const
         {
@@ -279,10 +232,6 @@ namespace hemelb::configuration
         const std::vector<IoletConfig> & GetOutlets() const
         {
           return outlets;
-        }
-        lb::StressTypes GetStressType() const
-        {
-          return sim_info.stress_type;
         }
         const path& GetDataFilePath() const
         {
@@ -320,15 +269,15 @@ namespace hemelb::configuration
         {
           return propertyOutputs;
         }
-        path const& GetColloidConfigPath() const
+
+        inline path const& GetColloidConfigPath() const
         {
-          return xmlFilePath;
+          return colloid_xml_path.value();
         }
-        /**
-         * True if the XML file has a section specifying colloids.
-         * @return
-         */
-        bool HasColloidSection() const;
+
+        inline bool HasColloidSection() const {
+            return colloid_xml_path.has_value();
+        }
 
         // Get the initial condtion config
         inline const ICConfig& GetInitialCondition() const {
@@ -354,113 +303,26 @@ namespace hemelb::configuration
             return *rbcConf;
         }
 
-      protected:
-
-        /**
-         * Check that the iolet is OK for the CMake configuration.
-         * @param ioletEl
-         * @param requiredBC
-         */
-        virtual void CheckIoletMatchesCMake(const io::xml::Element& ioletEl,
-                                            const std::string& requiredBC) const;
-
-      public:
-        void DoIO(const io::xml::Element xmlNode);
-        void DoIOForSimulation(const io::xml::Element simEl);
-        void DoIOForGeometry(const io::xml::Element geometryEl);
-
-        std::vector<IoletConfig> DoIOForInOutlets(const io::xml::Element xmlNode) const;
-
-        void DoIOForBaseInOutlet(const io::xml::Element& ioletEl, IoletConfigBase& ioletConf) const;
-
-        IoletConfig DoIOForPressureInOutlet(const io::xml::Element& ioletEl) const;
-        IoletConfig DoIOForCosinePressureInOutlet(const io::xml::Element& ioletEl) const;
-        IoletConfig DoIOForFilePressureInOutlet(const io::xml::Element& ioletEl) const;
-        IoletConfig DoIOForMultiscalePressureInOutlet(
-            const io::xml::Element& ioletEl) const;
-
-        IoletConfig DoIOForVelocityInOutlet(const io::xml::Element& ioletEl) const;
-        IoletConfig DoIOForParabolicVelocityInOutlet(
-            const io::xml::Element& ioletEl) const;
-        /**
-         * Reads a Womersley velocity iolet definition from the XML config file and returns
-         * an InOutLetWomersleyVelocity object
-         *
-         * @param ioletEl in memory representation of <inlet> or <outlet> xml element
-         * @return InOutLetWomersleyVelocity object
-         */
-        IoletConfig DoIOForWomersleyVelocityInOutlet(const io::xml::Element& ioletEl) const;
-
-        /**
-         * Reads a file velocity iolet definition from the XML config file and returns
-         * an InOutLetFileVelocity object
-         *
-         * @param ioletEl in memory representation of <inlet> or <outlet> xml element
-         * @return InOutLetFileVelocity object
-         */
-        IoletConfig DoIOForFileVelocityInOutlet(const io::xml::Element& ioletEl) const;
-
-        void DoIOForProperties(const io::xml::Element& xmlNode);
-        void DoIOForProperty(io::xml::Element xmlNode, bool isLoading);
-        extraction::OutputField DoIOForPropertyField(const io::xml::Element& xmlNode);
-        extraction::PropertyOutputFile DoIOForPropertyOutputFile(
-            const io::xml::Element& propertyoutputEl);
-        extraction::StraightLineGeometrySelector* DoIOForLineGeometry(
-            const io::xml::Element& xmlNode);
-        extraction::PlaneGeometrySelector* DoIOForPlaneGeometry(const io::xml::Element&);
-        extraction::SurfacePointSelector* DoIOForSurfacePoint(const io::xml::Element&);
-
-        void DoIOForInitialConditions(io::xml::Element parent);
-	void DoIOForCheckpointFile(const io::xml::Element& checkpointEl);
-
-        /**
-         * Reads monitoring configuration from XML file
-         *
-         * @param monEl in memory representation of <monitoring> xml element
-         */
-        void DoIOForMonitoring(const io::xml::Element& monEl);
-
-        /**
-         * Reads configuration of steady state flow convergence check from XML file
-         *
-         * @param convEl in memory representation of the <steady_flow_convergence> XML element
-         */
-        void DoIOForSteadyFlowConvergence(const io::xml::Element& convEl);
-
-        /**
-         * Reads the configuration of one of the possible several converge criteria provided
-         *
-         * @param criterionEl in memory representation of the <criterion> XML element
-         */
-        void DoIOForConvergenceCriterion(const io::xml::Element& criterionEl);
-
-        TemplateCellConfig readCell(const io::xml::Element& cellNode) const;
-        std::map<std::string, TemplateCellConfig> readTemplateCells(io::xml::Element const& cellsEl) const;
-        RBCConfig DoIOForRedBloodCells(const io::xml::Element& rbcEl) const;
-
-    private:
-        path xmlFilePath;
+    protected:
+        std::shared_ptr<io::xml::Document> source_xml;
         path dataFilePath;
 
         std::vector<extraction::PropertyOutputFile> propertyOutputs;
-        /**
-         * True if the file has a colloids section.
-         */
-        bool hasColloidSection = false;
+
+        // Path of the colloid XML if colloids section present
+        std::optional<path> colloid_xml_path;
 
         MonitoringConfig monitoringConfig; ///< Configuration of various checks/tests
 
         std::optional<RBCConfig> rbcConf;
 
-      protected:
         GlobalSimInfo sim_info;
         ICConfig initial_condition;
-        // These have to contain pointers because there are multiple derived types that might be
-        // instantiated.
         std::vector<IoletConfig> inlets;
         std::vector<IoletConfig> outlets;
-      private:
     };
+
+
 }
 
 #endif /* HEMELB_CONFIGURATION_SIMCONFIG_H */

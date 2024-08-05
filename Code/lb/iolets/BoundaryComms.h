@@ -16,10 +16,9 @@ namespace hemelb::lb
 
       class BoundaryComms
       {
-        public:
+      public:
           BoundaryComms(SimulationState* iSimState, std::vector<int> &iProcsList,
                         const BoundaryCommunicator& boundaryComm, bool iHasBoundary);
-          ~BoundaryComms();
 
           void Wait();
 
@@ -36,7 +35,9 @@ namespace hemelb::lb
           void WaitAllComms();
           void FinishSend();
 
-        private:
+      private:
+          // MPI tag for communication
+          static constexpr int BC_TAG = 100;
           // This is necessary to support BC proc having fluid sites
           bool hasBoundary;
 
@@ -46,11 +47,8 @@ namespace hemelb::lb
           std::vector<int> procsList;
           const BoundaryCommunicator& bcComm;
 
-          MPI_Request *sendRequest;
-          MPI_Status *sendStatus;
-
-          MPI_Request receiveRequest;
-          MPI_Status receiveStatus;
+          std::vector<net::MpiRequest> sendRequest;
+          net::MpiRequest receiveRequest;
 
           SimulationState* mState;
       };

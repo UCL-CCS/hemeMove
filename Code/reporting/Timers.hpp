@@ -8,43 +8,36 @@
 
 #include "reporting/Timers.h"
 
-namespace hemelb
+namespace hemelb::reporting
 {
-  namespace reporting
-  {
-    template<class ClockPolicy, class CommsPolicy>
-    void TimersBase<ClockPolicy, CommsPolicy>::Reduce()
+    template<class ClockPolicy>
+    template <typename Communicator>
+    void TimersBase<ClockPolicy>::Reduce(Communicator &&comm)
     {
-      double timings[numberOfTimers];
-      for (unsigned int ii = 0; ii < numberOfTimers; ii++)
-      {
-        timings[ii] = timers[ii].Get();
-      }
+        n_processes = comm.Size();
+        DArray timings;
+        for (unsigned int i = 0; i < numberOfTimers; i++)
+            timings[i] = timers[i].Get();
 
-      CommsPolicy::Reduce(timings, &maxes[0], numberOfTimers, net::MpiDataType<double>(),
-      MPI_MAX,
-                          0);
-      CommsPolicy::Reduce(timings, &means[0], numberOfTimers, net::MpiDataType<double>(),
-      MPI_SUM,
-                          0);
-      CommsPolicy::Reduce(timings, &mins[0], numberOfTimers, net::MpiDataType<double>(),
-      MPI_MIN,
-                          0);
-      for (unsigned int ii = 0; ii < numberOfTimers; ii++)
-      {
-        means[ii] /= double(CommsPolicy::GetProcessorCount());
-      }
+        using span = std::span<double, numberOfTimers>;
+        using cspan = std::span<double const, numberOfTimers>;
+        comm.Reduce(span(maxes), cspan(timings), MPI_MAX, 0);
+        comm.Reduce(span(means), cspan(timings), MPI_SUM, 0);
+        comm.Reduce(span(mins), cspan(timings), MPI_MIN, 0);
+
+        for (auto& m: means)
+            m /= n_processes;
     }
 
-    template<class ClockPolicy, class CommsPolicy>
-    void TimersBase<ClockPolicy, CommsPolicy>::Report(Dict& dictionary)
+    template<class ClockPolicy>
+    void TimersBase<ClockPolicy>::Report(Dict& dictionary)
     {
-      dictionary.SetIntValue("THREADS", CommsPolicy::GetProcessorCount());
+      dictionary.SetIntValue("THREADS", n_processes);
 
       for (unsigned int ii = 0; ii < numberOfTimers; ii++)
       {
         Dict timer = dictionary.AddSectionDictionary("TIMER");
-        timer.SetValue("NAME", timerNames[ii]);
+        timer.SetValue("NAME", timers[ii].description);
         timer.SetFormattedValue("LOCAL", "%.3g", timers[ii].Get());
         timer.SetFormattedValue("MIN", "%.3g", Mins()[ii]);
         timer.SetFormattedValue("MEAN", "%.3g", Means()[ii]);
@@ -52,7 +45,5 @@ namespace hemelb
       }
     }
 
-  }
 }
-
 #endif // HEMELB_REPORTING_TIMERS_HPP

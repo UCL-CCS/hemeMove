@@ -2,10 +2,8 @@
 // the HemeLB team and/or their institutions, as detailed in the
 // file AUTHORS. This software is provided under the terms of the
 // license in the file LICENSE.
-#ifndef HEMELB_SIMULATIONMASTER_IMPL_H
-#define HEMELB_SIMULATIONMASTER_IMPL_H
 
-#include "SimulationMaster.h"
+#include "SimulationController.h"
 
 #include <map>
 #include <limits>
@@ -17,7 +15,7 @@
 #include "extraction/PropertyActor.h"
 #include "extraction/LbDataSourceIterator.h"
 #include "io/writers/XdrFileWriter.h"
-#include "util/utilityFunctions.h"
+#include "util/numerical.h"
 #include "geometry/Domain.h"
 #include "log/Logger.h"
 #include "lb/HFunction.h"
@@ -34,56 +32,23 @@
 namespace hemelb
 {
     /**
-     * Constructor for the SimulationMaster class
+     * Constructor for the SimulationController class
      *
      * Initialises member variables including the network topology
      * object.
      */
-    template<class TRAITS>
-    SimulationMaster<TRAITS>::SimulationMaster(configuration::CommandLine & options,
-                                               const net::IOCommunicator& ioComm) :
-            ioComms(ioComm.Duplicate()), timings(ioComms), build_info(),
-            communicationNet(ioComms)
+    SimulationController::SimulationController(const net::IOCommunicator& ioComm) :
+            build_info(), ioComms(ioComm.Duplicate()), communicationNet(ioComms)
     {
-        // Start the main timer!
-        timings[reporting::Timers::total].Start();
-
-        fileManager = std::make_shared<io::PathManager>(options,
-                                                                IsCurrentProcTheIOProc(),
-                                                                GetProcessorCount());
-        log::Logger::Log<log::Info, log::Singleton>("Reading configuration from %s", fileManager->GetInputFile().c_str());
-        // Convert XML to configuration
-        simConfig = configuration::SimConfig::New(fileManager->GetInputFile());
-        // Use it to initialise self
-        auto builder = configuration::SimBuilder(*simConfig);
-        log::Logger::Log<log::Info, log::Singleton>("Beginning Initialisation.");
-        builder(*this);
     }
 
-  /**
-   * Destructor for the SimulationMaster class.
-   *
-   * Deallocates dynamically allocated memory to contained classes.
-   */
-  template<class TRAITS> SimulationMaster<TRAITS>::~SimulationMaster()
-  {
-  }
-
-  /**
-   * Returns true if the current processor is the dedicated I/O
-   * processor.
-   */
-  template<class TRAITS>
-  bool SimulationMaster<TRAITS>::IsCurrentProcTheIOProc()
-  {
-    return ioComms.OnIORank();
-  }
+  /// Destructor for the SimulationController class.
+  SimulationController::~SimulationController() = default;
 
   /**
    * Returns the number of processors involved in the simulation.
    */
-  template<class TRAITS>
-  int SimulationMaster<TRAITS>::GetProcessorCount()
+  int SimulationController::GetProcessorCount()
   {
     return ioComms.Size();
   }
@@ -92,31 +57,17 @@ namespace hemelb
    * Initialises various elements of the simulation if necessary:
    * domain decomposition, LBM and visualisation.
    */
-  template<class TRAITS>
-  void SimulationMaster<TRAITS>::Initialise()
+  void SimulationController::Initialise()
   {
 
   }
 
-  template<class TRAITS>
-  unsigned int SimulationMaster<TRAITS>::OutputPeriod(unsigned int frequency)
-  {
-    if (frequency == 0)
-    {
-      return 1000000000;
-    }
-    unsigned long roundedPeriod = simulationState->GetTotalTimeSteps() / frequency;
-    return util::NumericalFunctions::max(1U, (unsigned int) roundedPeriod);
-  }
-
-  template<class TRAITS>
-  void SimulationMaster<TRAITS>::HandleActors()
+  void SimulationController::HandleActors()
   {
     stepManager->CallActions();
   }
 
-  template<class TRAITS>
-  void SimulationMaster<TRAITS>::OnUnstableSimulation()
+  void SimulationController::OnUnstableSimulation()
   {
     LogStabilityReport();
     log::Logger::Log<log::Warning, log::Singleton>("Aborting: time step length: %f\n",
@@ -128,30 +79,40 @@ namespace hemelb
   /**
    * Begin the simulation.
    */
-  template<class TRAITS>
-  void SimulationMaster<TRAITS>::RunSimulation()
+  void SimulationController::RunSimulation()
   {
     log::Logger::Log<log::Info, log::Singleton>("Beginning to run simulation.");
-    timings[reporting::Timers::simulation].Start();
+    timings.simulation().Start();
 
-    while (simulationState->GetTimeStep() <= simulationState->GetTotalTimeSteps())
+    auto cp = [&] () {
+        if (checkpointer && checkpointer->ShouldWrite()) {
+            timings.writeCheckpoint().Start();
+            checkpointer->Write(ToConfig());
+            timings.writeCheckpoint().Stop();
+        }
+    };
+
+    cp();
+    while (simulationState->GetTimeStep() < simulationState->GetEndTimeStep())
     {
       DoTimeStep();
+      cp();
+
       if (simulationState->IsTerminating())
       {
         break;
       }
     }
 
-    timings[reporting::Timers::simulation].Stop();
+    timings.simulation().Stop();
     Finalise();
   }
 
-  template<class TRAITS>
-  void SimulationMaster<TRAITS>::Finalise()
+  void SimulationController::Finalise()
   {
-    timings[reporting::Timers::total].Stop();
-    timings.Reduce();
+    timings.total().Stop();
+    timings.Reduce(ioComms);
+
     if (IsCurrentProcTheIOProc())
     {
       reporter->FillDictionary();
@@ -165,8 +126,7 @@ namespace hemelb
     log::Logger::Log<log::Info, log::Singleton>("Finish running simulation.");
   }
 
-  template<class TRAITS>
-  void SimulationMaster<TRAITS>::DoTimeStep()
+  void SimulationController::DoTimeStep()
   {
     log::Logger::Log<log::Debug, log::OnePerCore>("Current LB time: %e",
                                                   simulationState->GetTime());
@@ -219,8 +179,7 @@ namespace hemelb
     simulationState->Increment();
   }
 
-  template<class TRAITS>
-  void SimulationMaster<TRAITS>::RecalculatePropertyRequirements()
+  void SimulationController::RecalculatePropertyRequirements()
   {
     // Get the property cache & reset its list of properties to get.
     lb::MacroscopicPropertyCache& propertyCache = latticeBoltzmannModel->GetPropertyCache();
@@ -243,8 +202,7 @@ namespace hemelb
   /**
    * Called on error to abort the simulation and pull-down the MPI environment.
    */
-  template<class TRAITS>
-  void SimulationMaster<TRAITS>::Abort()
+  void SimulationController::Abort()
   {
     // This gives us something to work from when we have an error - we get the rank
     // that calls abort, and we get a stack-trace from the exception having been thrown.
@@ -254,8 +212,7 @@ namespace hemelb
     exit(1);
   }
 
-  template<class TRAITS>
-  void SimulationMaster<TRAITS>::LogStabilityReport()
+  void SimulationController::LogStabilityReport()
   {
     if (incompressibilityChecker && incompressibilityChecker->AreDensitiesAvailable())
     {
@@ -275,11 +232,16 @@ namespace hemelb
     }
   }
 
-  template<class TRAITS>
-  const util::UnitConverter& SimulationMaster<TRAITS>::GetUnitConverter() const
+  const util::UnitConverter& SimulationController::GetUnitConverter() const
   {
     return *unitConverter;
   }
-}
 
-#endif
+    configuration::SimConfig SimulationController::ToConfig() const {
+        using namespace configuration;
+        SimConfig ans = simConfig;
+        if (simConfig.HasColloidSection())
+            throw (Exception() << "Checkpointing not implemented for colloids");
+        return ans;
+    }
+}

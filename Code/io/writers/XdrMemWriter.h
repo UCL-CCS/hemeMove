@@ -12,9 +12,9 @@ namespace hemelb::io
 {
     // Simple wrapper to allow construction from pointer-length
     // arguments.
-    class XdrMemWriter : public XdrMetaWriter<char*> {
+    class XdrMemWriter : public XdrMetaWriter<std::byte*> {
     public:
-        XdrMemWriter(char* dataBuffer, unsigned int dataLength);
+        XdrMemWriter(std::byte* dataBuffer, unsigned int dataLength);
     };
 }
 #endif // HEMELB_IO_WRITERS_XDRMEMWRITER_H

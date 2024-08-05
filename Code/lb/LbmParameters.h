@@ -22,13 +22,6 @@ namespace hemelb::lb
 {
     class BoundaryValues;
 
-    enum StressTypes
-    {
-      VonMises = 0,
-      ShearStress = 1,
-      IgnoreStress = 2
-    };
-
     class LbmParameters
     {
         inline void CalcDerivedParams() {
@@ -111,8 +104,6 @@ namespace hemelb::lb
           return beta;
         }
 
-        StressTypes StressType;
-
       private:
         PhysicalTime timeStep = 1; // seconds
         PhysicalDistance voxelSize = 1; // metres
@@ -140,9 +131,6 @@ namespace hemelb::lb
 
         // Assume the first site to be used in the kernel is the first site in the core, unless otherwise specified
         InitParams() = default;
-
-        // The number of sites using this kernel instance.
-        site_t siteCount;
 
         // Each streamer is responsible for updating certain types of sites. These are arranged such they are largely
         // contiguous in memory (the local contiguous site id). This data structure refers to which of those are handled

@@ -6,7 +6,7 @@
 #include <catch2/catch.hpp>
 
 #include "lb/iolets/InOutLets.h"
-#include "configuration/SimConfig.h"
+#include "configuration/SimConfigReader.h"
 #include "configuration/SimBuilder.h"
 #include "resources/Resource.h"
 
@@ -18,16 +18,12 @@ namespace hemelb::tests
     //using namespace lb::iolets;
     using resources::Resource;
 
-    class UncheckedSimConfig : public configuration::SimConfig {
+    class UncheckedSimConfigReader : public configuration::SimConfigReader {
     public:
-        explicit UncheckedSimConfig(const std::string& path) :
-                configuration::SimConfig(path)
-        {
-            Init();
-        }
+        using configuration::SimConfigReader::SimConfigReader;
     protected:
         void CheckIoletMatchesCMake(const io::xml::Element& ioletEl,
-                                    const std::string& requiredBC) const override
+                                            std::string_view requiredBC) const override
         {
 
         }
@@ -59,7 +55,8 @@ namespace hemelb::tests
 
         SECTION("TestCosineConstruct") {
             // Bootstrap ourselves an iolet, by loading config.xml.
-            UncheckedSimConfig config(Resource("config.xml").Path());
+            UncheckedSimConfigReader reader(Resource("config.xml").Path());
+            auto config = reader.Read();
             configuration::SimBuilder builder(config);
             auto& converter = *builder.GetUnitConverter();
 
@@ -107,7 +104,8 @@ namespace hemelb::tests
             CopyResourceToTempdir("iolet.txt");
             MoveToTempdir();
 
-            UncheckedSimConfig config(Resource("config_file_inlet.xml").Path());
+            UncheckedSimConfigReader reader(Resource("config_file_inlet.xml").Path());
+            auto config = reader.Read();
             configuration::SimBuilder builder(config);
             auto& converter = *builder.GetUnitConverter();
 
@@ -120,7 +118,7 @@ namespace hemelb::tests
             file->Reset(state);
 
             // Ok, now we have an inlet, check the values are right.
-            REQUIRE(std::string("./iolet.txt") == file->GetFilePath());
+            REQUIRE(file->GetFilePath().filename() == "iolet.txt");
             REQUIRE(Approx(78.0) == converter.ConvertPressureToPhysicalUnits(file->GetPressureMin()));
             REQUIRE(Approx(82.0) == converter.ConvertPressureToPhysicalUnits(file->GetPressureMax()));
             auto expected = ApproxVector<PhysicalPosition>{-1.66017717834e-05, -4.58437586355e-05, -0.05};
@@ -134,12 +132,13 @@ namespace hemelb::tests
 
             REQUIRE(Approx(targetStartDensity) == file->GetDensityMin());
             REQUIRE(Approx(targetStartDensity) == file->GetDensity(0));
-            REQUIRE(Approx(targetMidDensity) == file->GetDensity(state.GetTotalTimeSteps() / 2));
+            REQUIRE(Approx(targetMidDensity) == file->GetDensity(state.GetEndTimeStep() / 2));
         }
 
         SECTION("TestParabolicVelocityConstruct") {
             // Bootstrap ourselves an inoutlet, by loading config.xml.
-            UncheckedSimConfig config(Resource("config-velocity-iolet.xml").Path());
+            UncheckedSimConfigReader reader(Resource("config-velocity-iolet.xml").Path());
+            auto config = reader.Read();
             configuration::SimBuilder builder(config);
             auto& converter = *builder.GetUnitConverter();
 
@@ -173,7 +172,8 @@ namespace hemelb::tests
 
         SECTION("TestWomersleyVelocityConstruct") {
             // Bootstrap ourselves a in inoutlet, by loading config.xml.
-            UncheckedSimConfig config(Resource("config_new_velocity_inlets.xml").Path());
+            UncheckedSimConfigReader reader(Resource("config_new_velocity_inlets.xml").Path());
+            auto config = reader.Read();
             configuration::SimBuilder builder(config);
             auto& converter = *builder.GetUnitConverter();
 
@@ -192,7 +192,7 @@ namespace hemelb::tests
 
             // Check the IOLET contains the values expected given the file.
             REQUIRE(10.0 == womersVel->GetRadius());
-            REQUIRE(mmHg_TO_PASCAL * 1e-6 == womersVel->GetPressureGradientAmplitude());
+            REQUIRE(Approx(1e-6) == womersVel->GetPressureGradientAmplitude());
             REQUIRE(5.0 == womersVel->GetPeriod());
             REQUIRE(2.0 == womersVel->GetWomersleyNumber());
             REQUIRE(ApproxVector<PhysicalPosition>{0, 0, -0.05} ==
@@ -243,7 +243,8 @@ namespace hemelb::tests
             MoveToTempdir();
 
             // Bootstrap ourselves a file velocity inlet, by loading an appropriate config file.
-            UncheckedSimConfig config(Resource("config_file_velocity_inlet.xml").Path());
+            UncheckedSimConfigReader reader(Resource("config_file_velocity_inlet.xml").Path());
+            auto config = reader.Read();
             configuration::SimBuilder builder(config);
             auto& converter = *builder.GetUnitConverter();
 

@@ -32,11 +32,11 @@ namespace hemelb::io
 	// to be valid).
 	//
 	// Resource - a resource we might potentially use to store data
-	template<typename ByteOutputIterator,
+	template<std::output_iterator<std::byte> ByteOutputIterator,
 		 typename Resource = xdr::Null>
 	class XdrMetaWriter : public XdrWriter
 	{
-	protected:
+    protected:
 	  // Let resource in, if need be
 	  friend Resource;
 	  Resource res;
@@ -139,13 +139,23 @@ namespace hemelb::io
 	    // total byte count a multiple of four.
 	    const uint32_t len = stringToWrite.size();
 	    write(len);
-	    current = std::copy(stringToWrite.begin(), stringToWrite.end(), current);
-	    // Padding
-	    const auto req_nwords = (len - 1)/4 + 1;
-	    for (auto rem = 4 * req_nwords - len; rem; --rem)
-	      *current++ = 0;
-	    bytes_written += 4*req_nwords;
+        auto data = reinterpret_cast<std::byte const*>(stringToWrite.data());
+        _write(std::span(data, data + len));
 	  }
+
+      // Like xdr_opaque
+      void _write(std::span<const std::byte> bytes) override {
+          const auto len = bytes.size();
+          const auto req_nwords = (len - 1)/4 + 1;
+          const auto space = req_nwords * 4;
+
+          HASSERT(boi_traits::check_space(end, current, space));
+          current = std::copy(bytes.begin(), bytes.end(), current);
+          // Padding
+          for (auto i = len; i != space; ++i)
+              *current++ = std::byte{0};
+          bytes_written += 4*req_nwords;
+      }
 
 	  template <typename T>
 	  void write(T const& valToWrite) {
@@ -153,7 +163,7 @@ namespace hemelb::io
 	    // If we have an end then we must have space to store the serialised value
 	    HASSERT(boi_traits::check_space(end, current, buf_size));
 
-	    char buf[buf_size];
+	    std::byte buf[buf_size];
 	    xdr::xdr_serialise(valToWrite, buf);
 	    current = std::copy(buf, buf + buf_size, current);
 	    bytes_written += buf_size;

@@ -9,7 +9,7 @@
 #include <catch2/catch.hpp>
 
 #include "Traits.h"
-#include "SimulationMaster.h"
+#include "configuration/SimBuilder.h"
 #include "redblood/Cell.h"
 #include "redblood/CellController.h"
 #include "tests/redblood/Fixtures.h"
@@ -30,7 +30,7 @@ namespace hemelb::tests
                 STENCIL
         >;
     protected:
-        static const char* xml_name;
+        static constexpr char const* xml_name = "large_cylinder_rbc.xml";
         static constexpr int argc = 3;
         static const char* argv[argc];
 
@@ -41,7 +41,7 @@ namespace hemelb::tests
         }
 
         //! Creates a simulation. Does not run it.
-        std::shared_ptr<SimulationMaster<TRAITS>> simulationMaster(size_t steps,
+        auto createSim(size_t steps,
                                                                    Dimensionless cell,
                                                                    Dimensionless wall) const {
             CopyResourceToTempdir(xml_name);
@@ -56,13 +56,13 @@ namespace hemelb::tests
             ModifyXMLInput(xml_name, { "inlets", "inlet", "condition", "mean", "value" }, 0);
             ModifyXMLInput(xml_name, { "simulation", "steps", "value" }, steps);
             ModifyXMLInput(xml_name, { "redbloodcells", "cell2Cell", "intensity", "value" }, cell);
-            ModifyXMLInput(xml_name, { "redbloodcells", "cell2Cell", "cutoff", "value" }, 2);
+            ModifyXMLInput(xml_name, { "redbloodcells", "cell2Cell", "cutoffdistance", "value" }, 1);
             ModifyXMLInput(xml_name, { "redbloodcells", "cell2Wall", "intensity", "value" }, wall);
-            ModifyXMLInput(xml_name, { "redbloodcells", "cell2Wall", "cutoff", "value" }, 2);
+            ModifyXMLInput(xml_name, { "redbloodcells", "cell2Wall", "cutoffdistance", "value" }, 1);
             auto options = std::make_shared<configuration::CommandLine>(argc, argv);
-            auto const master = std::make_shared<SimulationMaster<TRAITS>>(*options, Comms());
-            helpers::LatticeDataAccess(&master->GetFieldData()).ZeroOutForces();
-            return master;
+            auto sim = configuration::SimBuilder::CreateSim<TRAITS>(*options, Comms());
+            helpers::LatticeDataAccess(&sim->GetFieldData()).ZeroOutForces();
+            return sim;
         }
 
         //! Runs simulation with a single node
@@ -70,12 +70,12 @@ namespace hemelb::tests
 
             using CellController = CellController<TRAITS>;
 
-            auto const master = this->simulationMaster(1, 0, intensity);
-            auto controller = std::static_pointer_cast<CellController>(master->GetCellController());
+            auto const sim = this->createSim(1, 0, intensity);
+            auto controller = std::static_pointer_cast<CellController>(sim->GetCellController());
             REQUIRE(controller); // XML file contains RBC problem definition, therefore a CellController should exist already
             controller->AddCell(std::make_shared<NodeCell>(where));
 
-            master->RunSimulation();
+            sim->RunSimulation();
             return (*controller->GetCells().begin())->GetVertices().front();
         }
 
@@ -85,23 +85,21 @@ namespace hemelb::tests
         ) {
             using CellController = hemelb::redblood::CellController<TRAITS>;
 
-            auto const master = this->simulationMaster(3, intensity, 0);
-            auto controller = std::static_pointer_cast<CellController>(master->GetCellController());
+            auto const sim = this->createSim(3, intensity, 0);
+            auto controller = std::static_pointer_cast<CellController>(sim->GetCellController());
             REQUIRE(controller); // XML file contains RBC problem definition, therefore a CellController should exist already
             auto const firstCell = std::make_shared<NodeCell>(n0);
             auto const secondCell = std::make_shared<NodeCell>(n1);
             controller->AddCell(firstCell);
             controller->AddCell(secondCell);
 
-            master->RunSimulation();
+            sim->RunSimulation();
             return {
                     firstCell->GetVertices().front(),
                     secondCell->GetVertices().front()
             };
         }
     };
-    template <typename STENCIL>
-    const char* NodeIntegrationTestsFixture<STENCIL>::xml_name = "large_cylinder_rbc.xml";
     template <typename STENCIL>
     const char* NodeIntegrationTestsFixture<STENCIL>::argv[NodeIntegrationTestsFixture<STENCIL>::argc] = {
             "hemelb", "-in", xml_name

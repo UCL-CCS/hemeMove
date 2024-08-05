@@ -5,10 +5,10 @@
 
 #include "lb/MacroscopicPropertyCache.h"
 
-namespace hemelb
+#include "geometry/Domain.h"
+
+namespace hemelb::lb
 {
-  namespace lb
-  {
     MacroscopicPropertyCache::MacroscopicPropertyCache(const SimulationState& simState,
                                                        const geometry::Domain& latticeData) :
       densityCache(simState, latticeData.GetLocalFluidSiteCount()),
@@ -42,6 +42,5 @@ namespace hemelb
     {
       return siteCount;
     }
-  }
 }
 

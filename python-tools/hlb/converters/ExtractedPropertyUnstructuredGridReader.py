@@ -160,7 +160,15 @@ class ExtractedPropertyUnstructuredGridReader(VTKPythonAlgorithmBase):
         # Create the arrays to store field data
         field_dict = {}
 
-        for name, xdrType, memType, length, offset in self.Extracted.GetFieldSpec():
+        for (
+            name,
+            xdrType,
+            memType,
+            length,
+            offset,
+            d_off,
+            scale,
+        ) in self.Extracted.GetFieldSpec():
             # Skip the grid (i.e. 3d-index)
             if name == "grid":
                 continue

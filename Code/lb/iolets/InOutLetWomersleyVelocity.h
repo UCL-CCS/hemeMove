@@ -89,7 +89,7 @@ namespace hemelb::lb
           void SetWomersleyNumber(const Dimensionless& womNumber);
 
         private:
-          typedef std::complex<double> Complex;
+          using Complex = std::complex<double>;
           static const Complex i;
           static const Complex iPowThreeHalves;
           LatticePressureGradient pressureGradientAmplitude; ///< See class documentation

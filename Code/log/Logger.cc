@@ -11,15 +11,12 @@
 #include <sys/time.h>
 #include <sys/resource.h>
 
-#include "util/utilityFunctions.h"
+#include "util/clock.h"
 #include "net/mpi.h"
 #include "log/Logger.h"
 
-namespace hemelb
+namespace hemelb::log
 {
-  namespace log
-  {
-    const LogLevel Logger::currentLogLevel = @HEMELB_LOG_LEVEL@;
     // Use negative value to indicate uninitialised.
     int Logger::thisRank = -1;
     double Logger::startTime = -1.0;
@@ -34,12 +31,12 @@ namespace hemelb
         {
           thisRank = net::MpiCommunicator::World().Rank();
         }
-        startTime = util::myClock();
+        startTime = util::clock();
       }
     }
 
     template<>
-    void Logger::LogInternal<OnePerCore>(std::string format, std::va_list args)
+    void Logger::LogInternal<OnePerCore>(std::string_view format, std::va_list args)
     {
       std::stringstream output;
 
@@ -47,7 +44,7 @@ namespace hemelb
       output.fill('0');
 
       output << "[Rank " << std::setw(7) << thisRank << ", " << std::setiosflags(std::ios::fixed)
-          << std::setprecision(1) << (util::myClock() - startTime) << "s";
+          << std::setprecision(1) << (util::clock() - startTime) << "s";
 
 #ifdef HAVE_RUSAGE
       rusage usage;
@@ -64,17 +61,13 @@ namespace hemelb
     }
 
     template<>
-    void Logger::LogInternal<Singleton>(std::string format, std::va_list args)
+    void Logger::LogInternal<Singleton>(std::string_view format, std::va_list args)
     {
-      if (thisRank == 0)
-      {
-        char lead[20];
-        std::sprintf(lead, "![%.1fs]", util::myClock() - startTime);
-
-        std::string newFormat = std::string(lead);
-        std::vprintf(newFormat.append(format).append("\n").c_str(), args);
-      }
+        if (thisRank == 0)
+        {
+            std::printf("![%.1fs] ", util::clock() - startTime);
+            std::vprintf(format.data(), args);
+            std::printf("\n");
+        }
     }
-
-  }
 }

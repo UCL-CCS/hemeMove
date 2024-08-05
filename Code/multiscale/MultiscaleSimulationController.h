@@ -3,27 +3,29 @@
 // file AUTHORS. This software is provided under the terms of the
 // license in the file LICENSE.
 
-#ifndef HEMELB_MULTISCALE_MULTISCALESIMULATIONMASTER_H
-#define HEMELB_MULTISCALE_MULTISCALESIMULATIONMASTER_H
+#ifndef HEMELB_MULTISCALE_MULTISCALESIMULATIONCONTROLLER_H
+#define HEMELB_MULTISCALE_MULTISCALESIMULATIONCONTROLLER_H
+
 #include <vector>
+#include "lb/iolets/InOutLetMultiscale.h"
 #include "multiscale/Intercommunicator.h"
-#include "SimulationMaster.h"
+#include "SimulationController.h"
 #include "util/span.h"
 
 namespace hemelb::multiscale
 {
     /***
-     * Instead of adding multiscale functionality to the standard simulation master, we keep this here,
+     * Instead of adding multiscale functionality to the standard simulation controller, we keep this here,
      * so the main code can be read without thinking about multiscale.
      */
     template<class Intercommunicator>
-    class MultiscaleSimulationMaster : public SimulationMaster<>
+    class MultiscaleSimulationController : public SimulationController
     {
-      public:
-        MultiscaleSimulationMaster(configuration::CommandLine &options,
+    public:
+        MultiscaleSimulationController(configuration::CommandLine &options,
                                    const net::IOCommunicator& ioComm,
                                    Intercommunicator & aintercomms) :
-            SimulationMaster<>(options, ioComm), intercomms(aintercomms),
+            SimulationController(options, ioComm), intercomms(aintercomms),
                 multiscaleIoletType("inoutlet")
         {
           // We only have one shared object type so far, an iolet.
@@ -85,39 +87,26 @@ namespace hemelb::multiscale
           if (velocity == true)
           {
             /* Do not include the non-iolet adjacent sites (resp. MidFluid and Wall-adjacent). */
-            long long int offset = domainData->GetMidDomainCollisionCount(0)
-                                   + domainData->GetMidDomainCollisionCount(1);
 
             /* Do include iolet adjacent sites (inlet) */
-            long long int ioletsSiteCount = domainData->GetMidDomainCollisionCount(2);
             invertedInletBoundaryList = PopulateInvertedBoundaryList(domainData.get(),
                                                                      invertedInletBoundaryList,
-                                                                     offset,
-                                                                     ioletsSiteCount);
+                                                                     domainData->GetMidDomainSiteRange(2));
 
-            offset += domainData->GetMidDomainCollisionCount(2);
             /* Do include iolet adjacent sites (outlet) */
-            ioletsSiteCount = domainData->GetMidDomainCollisionCount(3);
             invertedOutletBoundaryList = PopulateInvertedBoundaryList(domainData.get(),
                                                                       invertedOutletBoundaryList,
-                                                                      offset,
-                                                                      ioletsSiteCount);
+                                                                      domainData->GetMidDomainSiteRange(3));
 
-            offset += domainData->GetMidDomainCollisionCount(3);
             /* Do include iolet adjacent sites (inlet-wall) */
-            ioletsSiteCount = domainData->GetMidDomainCollisionCount(4);
             invertedInletBoundaryList = PopulateInvertedBoundaryList(domainData.get(),
                                                                      invertedInletBoundaryList,
-                                                                     offset,
-                                                                     ioletsSiteCount);
+                                                                     domainData->GetMidDomainSiteRange(4));
 
-            offset += domainData->GetMidDomainCollisionCount(4);
             /* Do include iolet adjacent sites (outlet-wall) */
-            ioletsSiteCount = domainData->GetMidDomainCollisionCount(5);
             invertedOutletBoundaryList = PopulateInvertedBoundaryList(domainData.get(),
                                                                       invertedOutletBoundaryList,
-                                                                      offset,
-                                                                      ioletsSiteCount);
+                                                                      domainData->GetMidDomainSiteRange(5));
 
             log::Logger::Log<log::Debug, log::OnePerCore>("Populated inlets (numinlets/sizeinlet0): %i/%i",
                                                                                   invertedInletBoundaryList.size(),
@@ -190,9 +179,9 @@ namespace hemelb::multiscale
             }
           }
 
-          log::Logger::Log<log::Debug, log::OnePerCore>("MSMaster ShareICs started...");
+          log::Logger::Log<log::Debug, log::OnePerCore>("MSController ShareICs started...");
           intercomms.ShareInitialConditions();
-          log::Logger::Log<log::Debug, log::OnePerCore>("MSMaster Init finished!");
+          log::Logger::Log<log::Debug, log::OnePerCore>("MSController Init finished!");
         }
 
         void PrintVectorList(std::vector<std::vector<site_t> > v)
@@ -210,7 +199,7 @@ namespace hemelb::multiscale
           }
         }
 
-        void DoTimeStep()
+        void DoTimeStep() override
         {
           bool advance = intercomms.DoMultiscale(GetState().GetTime());
           log::Logger::Log<log::Info, log::Singleton>("At time step %i, should advance %i, time %f",
@@ -268,7 +257,7 @@ namespace hemelb::multiscale
             //{
             log::Logger::Log<log::Debug, log::Singleton>("Step: HemeLB advanced to time %f.",
                                                                                  GetState().GetTime());
-            SimulationMaster::DoTimeStep();
+            SimulationController::DoTimeStep();
             //}
           }
           else
@@ -280,7 +269,7 @@ namespace hemelb::multiscale
         Intercommunicator &intercomms;
         typename Intercommunicator::IntercommunicandTypeT multiscaleIoletType;
 
-      private:
+    private:
 
         /* Loops over iolets to set the need for communications. */
         void SetCommsRequired(lb::BoundaryValues* ioletValues, bool b)
@@ -307,20 +296,19 @@ namespace hemelb::multiscale
         //out: iBL
         //in: domain_type, [Site Object]->SiteData->GetBoundaryID,
         //MPI_Gatherv if data is only this process.
-        std::vector<std::vector<site_t> > PopulateInvertedBoundaryList(
+        std::vector<std::vector<site_t> >
+        PopulateInvertedBoundaryList(
             geometry::Domain* latticeData,
-            std::vector<std::vector<site_t> > invertedBoundaryList, int offset, int ioletsSiteCount)
-        {
-          for (int i = 0; i < ioletsSiteCount; i++)
-          {
-            /* 1. Obtain Boundary ID number. */
-            auto&& s = latticeData->GetSite(offset + i).GetSiteData();
-            int boundaryID = s.GetIoletId();
+            std::vector<std::vector<site_t> > invertedBoundaryList, std::pair<site_t, site_t> i_range
+        ) {
+            for (auto i = i_range.first; i < i_range.second; ++i) {
+                /* 1. Obtain Boundary ID number. */
+                auto&& s = latticeData->GetSite(i).GetSiteData();
+                int boundaryID = s.GetIoletId();
 
-            /* 2. Grow the list to an appropriate size if needed. */
-            while ( ((int) invertedBoundaryList.size()) <= boundaryID)
-            {
-              log::Logger::Log<log::Warning, log::OnePerCore>("WARNING: Growing the invertedBoundaryList, because we created in wrongly in MultiscaleSimulation Master.");
+                /* 2. Grow the list to an appropriate size if needed. */
+                while (std::ssize(invertedBoundaryList) <= boundaryID) {
+              log::Logger::Log<log::Warning, log::OnePerCore>("WARNING: Growing the invertedBoundaryList, because we created in wrongly in MultiscaleSimulation Controller.");
               std::vector<site_t> a(0);
               invertedBoundaryList.push_back(a);
               if (invertedBoundaryList.size() > 100000)
@@ -328,11 +316,14 @@ namespace hemelb::multiscale
                 log::Logger::Log<log::Warning, log::OnePerCore>("ERROR: invertedBoundaryList is growing to ridiculous proportions due to a faulty boundaryID.");
                 exit(-1);
               }
-            }
+                }
 
-            /* 3. Insert this site in the inverted Boundary List. */
-            invertedBoundaryList[boundaryID].push_back(latticeData->GetGlobalNoncontiguousSiteIdFromGlobalCoords(latticeData->GetSite(offset
-                + i).GetGlobalSiteCoords()));
+                /* 3. Insert this site in the inverted Boundary List. */
+                invertedBoundaryList[boundaryID].push_back(
+                        latticeData->GetGlobalNoncontiguousSiteIdFromGlobalCoords(
+                                latticeData->GetSite(i).GetGlobalSiteCoords()
+                        )
+                );
           }
           return invertedBoundaryList;
         }
@@ -391,4 +382,4 @@ namespace hemelb::multiscale
 
 }
 
-#endif // HEMELB_MULTISCALE_MULTISCALESIMULATIONMASTER_H
+#endif // HEMELB_MULTISCALE_MULTISCALESIMULATIONCONTROLLER_H

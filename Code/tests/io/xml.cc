@@ -137,6 +137,23 @@ namespace hemelb::tests
 	REQUIRE_THROWS_AS(html.GetParentOrThrow(), xml::ParentError);
       }
 
+        SECTION("Test iteration of named children") {
+            auto html = xmlDoc->GetRoot();
+            auto n = 0;
+            for (auto d: html.Children("body")) {
+                n++;
+            }
+            REQUIRE(n == 1);
+        }
+        SECTION("Test iteration of all children") {
+            auto html = xmlDoc->GetRoot();
+            auto n = 0;
+            for (auto d: html.Children()) {
+                n++;
+            }
+            REQUIRE(n == 3);
+        }
+
       SECTION("Test attribute conversion") {
 	// <datum type="int" value="120" />
 	TestAttributeConversion<int>(0, 120, xmlDoc->GetRoot());

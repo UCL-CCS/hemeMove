@@ -8,11 +8,10 @@
 
 #include "colloids/BodyForces.h"
 #include "configuration/SimConfig.h"
+#include "configuration/SimConfigReader.h"
 
-namespace hemelb
+namespace hemelb::colloids
 {
-  namespace colloids
-  {
     /** general class representing a linear body force, e.g. gravity over short distances */
     class ConstantBodyForce : public BodyForce
     {
@@ -100,6 +99,5 @@ namespace hemelb
     class RadialBodyForceFactory : public BodyForceFactory<RadialBodyForce>
     {
     };
-  }
 }
 #endif /* HEMELB_COLLOIDS_BODYFORCEEXAMPLES_H */

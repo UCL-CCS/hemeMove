@@ -5,7 +5,7 @@
 
 #include "lb/kernels/TruncatedPowerLawRheologyModel.h"
 #include "lb/LbmParameters.h"
-#include "util/utilityFunctions.h"
+#include "util/numerical.h"
 
 namespace hemelb::lb
 {
@@ -15,7 +15,7 @@ namespace hemelb::lb
             const double &iShearRate, const distribn_t &iDensity) const
     {
         // Don't allow shear rates outside [GAMMA_ZERO, GAMMA_INF]
-        double gamma = util::NumericalFunctions::enforceBounds(iShearRate, GAMMA_ZERO, GAMMA_INF);
+        double gamma = std::clamp(iShearRate, GAMMA_ZERO, GAMMA_INF);
         return M_CONSTANT * pow(gamma, N_CONSTANT - 1);
     }
 }

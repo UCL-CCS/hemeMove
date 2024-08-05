@@ -14,9 +14,10 @@
 namespace hemelb {
 
     // A compile-time string suitable for use as a non-type template parameter.
-    // Easily comverts to C string or std::string.
+    // Easily converts to C string, std::string_view, or std::string.
     template<std::size_t N>
     struct ct_string {
+        // Literal types can't have private members, but don't use this directly.
         char str_[N + 1];
 
         constexpr ct_string(const char (&chars)[N + 1]) noexcept {
@@ -31,20 +32,25 @@ namespace hemelb {
         constexpr auto length() const {
             return N;
         }
+
         constexpr std::string str() const {
             return {str_, N};
         }
         constexpr std::string_view view() const {
             return {str_, N};
         }
-
         constexpr char const *c_str() const {
             return str_;
         }
 
-        constexpr operator std::string() const{
-            return str();
+        // Can implicitly convert without allocation
+        constexpr operator char const*() const {
+            return c_str();
         }
+        constexpr operator std::string_view() const {
+            return view();
+        }
+
     };
 
     template <std::size_t M, std::size_t N>
@@ -52,6 +58,7 @@ namespace hemelb {
         return left.view() == right.view();
     }
 
+    // Allow comparison to C strings
     template <std::size_t N>
     constexpr auto operator==(const ct_string<N>& left, const char* right) {
         return left.view() == std::string_view{right};

@@ -3,7 +3,6 @@
 // file AUTHORS. This software is provided under the terms of the
 // license in the file LICENSE.
 #include "lb/iolets/InOutLetWomersleyVelocity.h"
-#include "configuration/SimConfig.h"
 #include "util/Bessel.h"
 
 namespace hemelb::lb

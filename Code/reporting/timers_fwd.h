@@ -7,16 +7,16 @@
 #define HEMELB_REPORTING_TIMERS_FWD_H
 
 namespace hemelb::reporting {
-    template<class>
+
+    template<typename>
     class TimerBase;
-    template<class ClockPolicy, class CommsPolicy>
+    template<typename>
     class TimersBase;
 
-    class MPICommsPolicy;
-    class HemeLBClockPolicy;
+    struct HemeLBClockPolicy;
 
     using Timer = TimerBase<HemeLBClockPolicy>;
-    using Timers = TimersBase<HemeLBClockPolicy, MPICommsPolicy>;
+    using Timers = TimersBase<HemeLBClockPolicy>;
 
 }
 #endif

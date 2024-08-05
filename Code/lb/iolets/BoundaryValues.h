@@ -9,10 +9,11 @@
 #include "net/IOCommunicator.h"
 #include "net/IteratedAction.h"
 #include "lb/iolets/InOutLet.h"
-#include "geometry/Domain.h"
 #include "lb/iolets/BoundaryCommunicator.h"
+#include "geometry/SiteType.h"
 #include "util/clone_ptr.h"
 
+namespace hemelb::geometry { class Domain; }
 namespace hemelb::lb
 {
 

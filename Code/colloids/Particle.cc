@@ -342,7 +342,7 @@ namespace hemelb::colloids
               int blockStatus = 0; // valid && non-empty
               int siteStatus = 0; // valid && fluid
 
-              util::Vector3D<site_t> blockCoords, localSiteCoords;
+              Vec16 blockCoords, localSiteCoords;
               latDatLBM.GetBlockAndLocalSiteCoords(siteGlobalPosition,
                                                    blockCoords,
                                                    localSiteCoords);
@@ -354,7 +354,7 @@ namespace hemelb::colloids
 
               log::Logger::Log<log::Trace, log::OnePerCore>("WAIT A MINUTE 3 ...\n");
 
-              if (!latDatLBM.IsValidLatticeSite(localSiteCoords))
+              if (!latDatLBM.IsValidLatticeSite(siteGlobalPosition))
                 siteStatus = 1; // invalid - out of range
               else if (blockStatus == 2)
                 siteStatus = 2; // deemed solid because block is empty

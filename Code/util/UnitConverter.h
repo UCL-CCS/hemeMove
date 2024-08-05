@@ -17,7 +17,7 @@ namespace hemelb::util
 
     class UnitConverter
     {
-      public:
+    public:
         UnitConverter(PhysicalTime timeStep,
 		      PhysicalDistance voxelSize, PhysicalPosition latticeOrigin,
 		      PhysicalDensity fluidDensity, PhysicalPressure reference_pressure);
@@ -47,8 +47,8 @@ namespace hemelb::util
         template<class InputType>
         InputType ConvertStressToLatticeUnits(InputType stress) const
         {
-	  using SCALAR = typename scalar_type<InputType>::type;
-          return stress / SCALAR(latticePressure);
+            using SCALAR = typename scalar_type<InputType>::type;
+            return stress / SCALAR(latticePressure);
         }
 
         /**
@@ -57,13 +57,13 @@ namespace hemelb::util
         template<class InputType>
         InputType ConvertStressToPhysicalUnits(InputType stress) const
         {
-	  using SCALAR = typename scalar_type<InputType>::type;
-          return stress * SCALAR(latticePressure);
+            using SCALAR = typename scalar_type<InputType>::type;
+            return stress * SCALAR(latticePressure);
         }
 
         /**
          * Convert a full stress tensor (including pressure and deviatoric components)
-         * to physical units. Note how the diagonal is shifted by reference_pressure_mmHg.
+         * to physical units. Note how the diagonal is shifted by reference_pressure_Pa.
          *
          * @param stressTensor stress tensor in lattice units
          * @return stress tensor in physical units
@@ -71,13 +71,13 @@ namespace hemelb::util
         Matrix3D ConvertFullStressTensorToPhysicalUnits(Matrix3D stressTensor) const
         {
           Matrix3D ret = stressTensor * latticePressure;
-          ret.addDiagonal(reference_pressure_mmHg * mmHg_TO_PASCAL);
+          ret.addDiagonal(reference_pressure_Pa);
           return ret;
         }
 
         /**
          * Convert a traction vector (force per unit area) to physical units. Note how a
-         * reference_pressure_mmHg*wallNormal component is added to account for the reference
+         * reference_pressure_Pa*wallNormal component is added to account for the reference
          * pressure that was removed when converting the simulation input to lattice units.
          *
          * @param traction traction vector (computed the full stress tensor)
@@ -88,10 +88,10 @@ namespace hemelb::util
         Vector3D<VectorType> ConvertTractionToPhysicalUnits(
             Vector3D<VectorType> traction, const Vector3D<Dimensionless>& wallNormal) const
         {
-	  using SCALAR = typename scalar_type<VectorType>::type;
-          Vector3D<VectorType> ret = traction * SCALAR(latticePressure);
-          ret += wallNormal * reference_pressure_mmHg * mmHg_TO_PASCAL;
-          return ret;
+            using SCALAR = typename scalar_type<VectorType>::type;
+            Vector3D<VectorType> ret = traction * SCALAR(latticePressure);
+            ret += wallNormal * reference_pressure_Pa;
+            return ret;
         }
 
         /**
@@ -102,8 +102,8 @@ namespace hemelb::util
         template<class InputType>
         InputType ConvertVelocityToLatticeUnits(InputType velocity) const
         {
-	  using SCALAR = typename scalar_type<InputType>::type;
-	  return velocity / SCALAR(latticeSpeed);
+            using SCALAR = typename scalar_type<InputType>::type;
+            return velocity / SCALAR(latticeSpeed);
         }
 
         /**
@@ -114,10 +114,11 @@ namespace hemelb::util
         template<class InputType>
         InputType ConvertVelocityToPhysicalUnits(InputType velocity) const
         {
-	  using SCALAR = typename scalar_type<InputType>::type;
-          // convert velocity from lattice units to physical units (m/s)
-          return velocity * SCALAR(latticeSpeed);
+            using SCALAR = typename scalar_type<InputType>::type;
+            // convert velocity from lattice units to physical units (m/s)
+            return velocity * SCALAR(latticeSpeed);
         }
+
         double ConvertPressureDifferenceToPhysicalUnits(distribn_t pressure_grad) const;
 
         LatticeTime ConvertTimeToLatticeUnits(const PhysicalTime& t) const;
@@ -132,9 +133,21 @@ namespace hemelb::util
         PhysicalReciprocalTime ConvertShearRateToPhysicalUnits(
             LatticeReciprocalTime shearRate) const;
 
-        const PhysicalDistance& GetVoxelSize() const
+        inline const PhysicalDistance& GetVoxelSize() const
         {
           return latticeDistance;
+        }
+
+        inline const PhysicalTime& GetTimeStep() const {
+            return latticeTime;
+        }
+
+        inline const PhysicalMass& GetMassScale() const {
+            return latticeMass;
+        }
+
+        inline const PhysicalPressure& GetReferencePressure() const {
+            return reference_pressure_Pa;
         }
 
         const PhysicalPosition& GetLatticeOrigin() const
@@ -185,19 +198,9 @@ namespace hemelb::util
           {
             scale_factor = latticeDistance / latticeTime;
           }
-          else if (units == "mmHg")
-          {
-            scale_factor = latticeMass / (latticeDistance * latticeTime * latticeTime)
-                / mmHg_TO_PASCAL;
-          }
           else if (units == "Pa")
           {
             scale_factor = latticeMass / (latticeDistance * latticeTime * latticeTime);
-          }
-          else if (units == "mmHg/m")
-          {
-            scale_factor = latticeMass
-                / (latticeDistance * latticeDistance * latticeTime * latticeTime) / mmHg_TO_PASCAL;
           }
           else if (units == "Pa/m")
           {
@@ -208,18 +211,18 @@ namespace hemelb::util
           {
             throw Exception() << "Unknown units '" << units << "'";
           }
-	  using SCALAR = typename scalar_type<T>::type;
-          return value / SCALAR(scale_factor);
+            using SCALAR = typename scalar_type<T>::type;
+            return value / SCALAR(scale_factor);
         }
 
-      private:
+    private:
         PhysicalDistance latticeDistance; //!< Lattice displacement in physical units.
         PhysicalTime latticeTime;
         PhysicalMass latticeMass;
         PhysicalSpeed latticeSpeed; //!< Lattice displacement length divided by time step.
         PhysicalPosition latticeOrigin;
         PhysicalPressure latticePressure;
-        PhysicalPressure reference_pressure_mmHg;
+        PhysicalPressure reference_pressure_Pa;
 
         template <typename T>
         struct scalar_type {

@@ -18,14 +18,14 @@ namespace hemelb::geometry
         Domain::Domain(const lb::LatticeInfo& latticeInfo,
                        const net::IOCommunicator& comms_) :
                 latticeInfo(latticeInfo),
-                shared_counts(comms_, 0),
+                shared_site_type_indices(comms_, 0),
                 neighbouringData(new neighbouring::NeighbouringDomain(latticeInfo)), comms(comms_)
         {
         }
 
         Domain::Domain(const lb::LatticeInfo& latticeInfo,
                        GmyReadResult& readResult, const net::IOCommunicator& comms_) :
-                latticeInfo(latticeInfo), shared_counts(comms_, 0),
+                latticeInfo(latticeInfo), shared_site_type_indices(comms_, 0),
                 neighbouringData(new neighbouring::NeighbouringDomain(latticeInfo)),
                 rank_for_site_store(std::move(readResult.block_store)),
                 comms(comms_)
@@ -69,21 +69,14 @@ namespace hemelb::geometry
     void Domain::ProcessReadSites(const GmyReadResult & readResult)
     {
         log::Logger::Log<log::Info, log::Singleton>("Processing sites assigned to each MPI process");
+	const auto NO_NORMAL = util::Vector3D<float>(NO_VALUE);
         const auto max_site_index = sites - util::Vector3D<site_t>::Ones();
         blocks.resize(rank_for_site_store->GetBlockCount());
 
         totalSharedFs = 0;
 
-        std::vector<SiteData> domainEdgeSiteData[COLLISION_TYPES];
-        std::vector<SiteData> midDomainSiteData[COLLISION_TYPES];
-        std::vector<site_t> domainEdgeBlockNumber[COLLISION_TYPES];
-        std::vector<site_t> midDomainBlockNumber[COLLISION_TYPES];
-        std::vector<site_t> domainEdgeSiteNumber[COLLISION_TYPES];
-        std::vector<site_t> midDomainSiteNumber[COLLISION_TYPES];
-        std::vector<util::Vector3D<float> > domainEdgeWallNormals[COLLISION_TYPES];
-        std::vector<util::Vector3D<float> > midDomainWallNormals[COLLISION_TYPES];
-        std::vector<float> domainEdgeWallDistance[COLLISION_TYPES];
-        std::vector<float> midDomainWallDistance[COLLISION_TYPES];
+        ReadDataBundle domainEdge;
+        ReadDataBundle midDomain;
 
         proc_t localRank = comms.Rank();
 
@@ -98,7 +91,7 @@ namespace hemelb::geometry
         // GmyReadResult. Since that is only guaranteed to know
         // the rank of sites which are assigned to this rank, it
         // may well return UNKNOWN_PROCESS
-        auto read_result_rank_for_site = [this, &max_site_index, &readResult](
+        auto read_result_rank_for_site = [&max_site_index, &readResult](
             util::Vector3D<site_t> const& global_site_coords,
             Vec16& block_coords, site_t& site_gmy_idx
         ) {
@@ -153,7 +146,8 @@ namespace hemelb::geometry
                 if (blocks[blockOctIdx].IsEmpty())
                     blocks[blockOctIdx] = Block(GetSitesPerBlockVolumeUnit());
 
-                auto assignedRank = blockReadIn.Sites[localSiteId].targetProcessor;
+		auto const& siteReadIn = blockReadIn.Sites[localSiteId];
+                auto assignedRank = siteReadIn.targetProcessor;
                 blocks[blockOctIdx].SetProcessorRankForSite(localSiteId, assignedRank);
 
                 // If the site is not on this processor, continue.
@@ -164,7 +158,7 @@ namespace hemelb::geometry
                 util::Vector3D<site_t> siteGlobalCoords = lowest_site_in_block + siteTraverser.GetCurrentLocation();
                 // Iterate over all non-zero direction vectors.
                 for (unsigned int l = 1; l < latticeInfo.GetNumVectors(); l++) {
-                    // Find the neighbour site co-ords in this direction.
+                    // Find the neighbour site coords in this direction.
                     util::Vector3D<site_t> neighbourGlobalCoords = siteGlobalCoords
                       + latticeInfo.GetVector(l).as<site_t>();
                     Vec16 neighbourBlock;
@@ -183,7 +177,7 @@ namespace hemelb::geometry
 
                 // Set the collision type data. map_block site data is renumbered according to
                 // fluid site numbers within a particular collision type.
-                SiteData siteData(blockReadIn.Sites[localSiteId]);
+                SiteData siteData(siteReadIn);
                 int l = -1;
                 switch (siteData.GetCollisionType()) {
                 case FLUID:
@@ -206,40 +200,26 @@ namespace hemelb::geometry
                     break;
                 }
 
-                const util::Vector3D<float>& normal = blockReadIn.Sites[localSiteId].wallNormalAvailable ?
-                  blockReadIn.Sites[localSiteId].wallNormal :
-                  util::Vector3D<float>(NO_VALUE);
+                auto& normal = siteReadIn.wallNormalAvailable ? siteReadIn.wallNormal : NO_NORMAL;
 
+                auto push_site_onto_bundle = [&](ReadDataBundle& b) {
+                    b.blockNumbers[l].push_back(blockOctIdx);
+                    b.siteNumbers[l].push_back(localSiteId);
+                    b.siteData[l].push_back(siteData);
+                    b.wallNormals[l].push_back(normal);
+                    for (Direction direction = 1; direction < latticeInfo.GetNumVectors(); direction++) {
+                        b.wallDistance[l].push_back(siteReadIn.links[direction - 1].distanceToIntersection);
+                    }
+                };
                 if (isMidDomainSite) {
-                    midDomainBlockNumber[l].push_back(blockOctIdx);
-                    midDomainSiteNumber[l].push_back(localSiteId);
-                    midDomainSiteData[l].push_back(siteData);
-                    midDomainWallNormals[l].push_back(normal);
-                    for (Direction direction = 1; direction < latticeInfo.GetNumVectors(); direction++) {
-                        midDomainWallDistance[l].push_back(blockReadIn.Sites[localSiteId].links[direction - 1].distanceToIntersection);
-                    }
+                    push_site_onto_bundle(midDomain);
                 } else {
-                    domainEdgeBlockNumber[l].push_back(blockOctIdx);
-                    domainEdgeSiteNumber[l].push_back(localSiteId);
-                    domainEdgeSiteData[l].push_back(siteData);
-                    domainEdgeWallNormals[l].push_back(normal);
-                    for (Direction direction = 1; direction < latticeInfo.GetNumVectors(); direction++) {
-                        domainEdgeWallDistance[l].push_back(blockReadIn.Sites[localSiteId].links[direction - 1].distanceToIntersection);
-                    }
+                    push_site_onto_bundle(domainEdge);
                 }
             }
         }
 
-        PopulateWithReadData(midDomainBlockNumber,
-                             midDomainSiteNumber,
-                             midDomainSiteData,
-                             midDomainWallNormals,
-                             midDomainWallDistance,
-                             domainEdgeBlockNumber,
-                             domainEdgeSiteNumber,
-                             domainEdgeSiteData,
-                             domainEdgeWallNormals,
-                             domainEdgeWallDistance);
+        PopulateWithReadData(midDomain, domainEdge);
 
         // We now have the distributed store setup, so can find which
         // process any site lives one. Set up the neighbouring
@@ -285,76 +265,51 @@ namespace hemelb::geometry
         }
     }
 
-        void Domain::PopulateWithReadData(
-                const std::vector<site_t> midDomainBlockNumbers[COLLISION_TYPES],
-                const std::vector<site_t> midDomainSiteNumbers[COLLISION_TYPES],
-                const std::vector<SiteData> midDomainSiteData[COLLISION_TYPES],
-                const std::vector<util::Vector3D<float> > midDomainWallNormals[COLLISION_TYPES],
-                const std::vector<float> midDomainWallDistance[COLLISION_TYPES],
-                const std::vector<site_t> domainEdgeBlockNumbers[COLLISION_TYPES],
-                const std::vector<site_t> domainEdgeSiteNumbers[COLLISION_TYPES],
-                const std::vector<SiteData> domainEdgeSiteData[COLLISION_TYPES],
-                const std::vector<util::Vector3D<float> > domainEdgeWallNormals[COLLISION_TYPES],
-                const std::vector<float> domainEdgeWallDistance[COLLISION_TYPES])
-        {
-            auto write_my_sites = rank_for_site_store->begin_writes();
+    void Domain::PopulateWithReadData(const ReadDataBundle &midDomain, const ReadDataBundle &domainEdge)
+    {
+        auto write_my_sites = rank_for_site_store->begin_writes();
 
-            log::Logger::Log<log::Info, log::Singleton>("Assigning local indices to sites and associated data");
-            // Populate the collision count arrays.
-            for (unsigned collisionType = 0; collisionType < COLLISION_TYPES; collisionType++)
-            {
-                MidDomainCollisionCount(collisionType) = midDomainBlockNumbers[collisionType].size();
-                DomainEdgeCollisionCount(collisionType) = domainEdgeBlockNumbers[collisionType].size();
-            }
-            // Data about local sites.
-            SiteRankIndex rank_index = {comms.Rank(), 0};
+        log::Logger::Log<log::Info, log::Singleton>("Assigning local indices to sites and associated data");
+
+        // Data about local sites.
+        SiteRankIndex rank_index = {comms.Rank(), 0};
+        // Track index of changes in type and store them in the counts array
+        auto ranges = shared_site_type_indices.Span();
+        auto current_count_iter = begin(ranges);
+        // Merge local sites into one big array. This lambda does either all the
+        // midDomain or all the domainEdge sites, putting them in order of their
+        // collision type (bulk/wall/inlet/etc).
+        auto op = [this, &rank_index, &write_my_sites, &current_count_iter](ReadDataBundle const& b) {
+            auto const NV = latticeInfo.GetNumVectors();
             auto& localFluidSites = rank_index[1];
-            // Data about contiguous local sites. First midDomain stuff, then domainEdge.
-            for (unsigned collisionType = 0; collisionType < COLLISION_TYPES; collisionType++)
-            {
-                for (unsigned indexInType = 0; indexInType < GetMidDomainCollisionCount(collisionType);
-                     indexInType++)
-                {
-                    siteData.push_back(midDomainSiteData[collisionType][indexInType]);
-                    wallNormalAtSite.emplace_back(midDomainWallNormals[collisionType][indexInType]);
-                    for (Direction direction = 1; direction < latticeInfo.GetNumVectors(); direction++)
-                    {
-                        distanceToWall.push_back(midDomainWallDistance[collisionType][indexInType
-                                                                                      * (latticeInfo.GetNumVectors() - 1) + direction - 1]);
+            for (unsigned collisionType = 0; collisionType < COLLISION_TYPES; collisionType++) {
+                *current_count_iter = localFluidSites;
+
+                for (unsigned i = 0; i < b.blockNumbers[collisionType].size(); ++i) {
+                    siteData.push_back(b.siteData[collisionType][i]);
+                    wallNormalAtSite.emplace_back(b.wallNormals[collisionType][i]);
+                    for (Direction dir = 1; dir < NV; dir++) {
+                        distanceToWall.push_back(
+                                b.wallDistance[collisionType][i * (NV - 1) + dir - 1]
+                        );
                     }
-                    site_t blockId = midDomainBlockNumbers[collisionType][indexInType];
-                    site_t siteId = midDomainSiteNumbers[collisionType][indexInType];
+                    site_t blockId = b.blockNumbers[collisionType][i];
+                    site_t siteId = b.siteNumbers[collisionType][i];
                     blocks[blockId].SetLocalContiguousIndexForSite(siteId, localFluidSites);
                     globalSiteCoords.push_back(GetGlobalCoords(blockId, GetSiteCoordsFromSiteId(siteId)));
                     write_my_sites(blockId)(siteId) = rank_index;
                     localFluidSites++;
                 }
 
+                // Note for all iterations except the last we will overwrite this, but nice and clear.
+                ++current_count_iter;
+                *current_count_iter = localFluidSites;
             }
-
-            for (unsigned collisionType = 0; collisionType < COLLISION_TYPES; collisionType++)
-            {
-                for (unsigned indexInType = 0; indexInType < GetDomainEdgeCollisionCount(collisionType);
-                     indexInType++)
-                {
-                    siteData.push_back(domainEdgeSiteData[collisionType][indexInType]);
-                    wallNormalAtSite.emplace_back(domainEdgeWallNormals[collisionType][indexInType]);
-                    for (Direction direction = 1; direction < latticeInfo.GetNumVectors(); direction++)
-                    {
-                        distanceToWall.push_back(domainEdgeWallDistance[collisionType][indexInType
-                                                                                       * (latticeInfo.GetNumVectors() - 1) + direction - 1]);
-                    }
-                    site_t blockId = domainEdgeBlockNumbers[collisionType][indexInType];
-                    site_t siteId = domainEdgeSiteNumbers[collisionType][indexInType];
-                    blocks[blockId].SetLocalContiguousIndexForSite(siteId, localFluidSites);
-                    globalSiteCoords.push_back(GetGlobalCoords(blockId, GetSiteCoordsFromSiteId(siteId)));
-                    write_my_sites(blockId)(siteId) = rank_index;
-                    localFluidSites++;
-                }
-
-            }
-            LocalFluidSiteCount() = localFluidSites;
-        }
+        };
+        // Now apply it. Order of these is important!
+        op(midDomain);
+        op(domainEdge);
+    }
 
         void Domain::CollectFluidSiteDistribution()
         {
@@ -362,7 +317,7 @@ namespace hemelb::geometry
             fluidSitesOnEachProcessor = comms.AllGather(GetLocalFluidSiteCount());
             totalFluidSites = std::reduce(
                     fluidSitesOnEachProcessor.begin(), fluidSitesOnEachProcessor.end(),
-                    0, std::plus<>{});
+                    site_t(0), std::plus<>{});
         }
 
         void Domain::CollectGlobalSiteExtrema()
@@ -514,35 +469,36 @@ namespace hemelb::geometry
             // propagate to different partitions is avoided (only their values
             // will be communicated). It's here!
             // Allocate the request variable.
-            net::Net tempNet(comms);
+            std::vector<net::MpiRequest> reqs(neighbouringProcs.size());
+            int i_req = 0;
             for (auto& neighbouringProc : neighbouringProcs)
             {
-                // We know that the elements are contiguous from asserts
-                auto flatten_vec_of_pairs = [] (auto&& vop) {
-                    auto& [loc, d] = vop.front();
-                    return std::span{&loc[0], vop.size() * 4};
-                };
-
                 // One way send receive.  The lower numbered netTop->ProcessorCount send and the higher numbered ones receive.
                 // It seems that, for each pair of processors, the lower numbered one ends up with its own
                 // edge sites and directions stored and the higher numbered one ends up with those on the
                 // other processor.
                 if (neighbouringProc.Rank > localRank)
                 {
-                    tempNet.RequestSendV<site_t>(
-                            flatten_vec_of_pairs(sharedFLocationForEachProc.at(neighbouringProc.Rank)),
-                            neighbouringProc.Rank);
-                }
-                else
-                {
+                    // We know that the elements are contiguous from asserts
+                    // in Domain.h about size and alignment of point_direction.
+                    // Using a template as want the const/mutable variants.
+                    auto const& to_send = sharedFLocationForEachProc.at(neighbouringProc.Rank);
+
+                    reqs[i_req] = comms.Issend(
+                            std::span<site_t const>(&to_send[0].first[0], to_send.size() * 4),
+                            neighbouringProc.Rank
+                            );
+                } else {
                     auto& dest = sharedFLocationForEachProc[neighbouringProc.Rank];
                     dest.resize(neighbouringProc.SharedDistributionCount);
-                    tempNet.RequestReceiveV(flatten_vec_of_pairs(dest),
-                                            neighbouringProc.Rank);
+                    reqs[i_req] = comms.Irecv(
+                            std::span<site_t>(&dest[0].first[0], 4*dest.size()),
+                            neighbouringProc.Rank
+                    );
                 }
+                i_req += 1;
             }
-
-            tempNet.Dispatch();
+            net::MpiRequest::Waitall(reqs);
         }
 
         void Domain::InitialiseReceiveLookup(proc2neighdata const& sharedFLocationForEachProc)
@@ -691,63 +647,22 @@ namespace hemelb::geometry
             siteCoords = (location % blockSize).as<U16>();
         }
 
-    template <typename Iter>
-    site_t total(Iter&& begin) {
-        return std::reduce(begin, begin + COLLISION_TYPES, site_t(0), std::plus<>());
-    }
-
     bool Domain::IsSiteDomainEdge(int rank, site_t local_idx) const {
         if (!remote_counts_cache.contains(rank)) {
             auto &tmp = remote_counts_cache[rank];
-            shared_counts.Get(std::span{tmp}, rank);
+            shared_site_type_indices.Get(std::span{tmp}, rank);
         }
         auto const& counts = remote_counts_cache[rank];
-        // Mid-domain counts are first
-        auto n_mid_domain = total(counts.begin());
+        // Mid-domain indices are first
+        auto n_mid_domain = counts[COLLISION_TYPES];
         return local_idx >= n_mid_domain;
     }
 
-    site_t Domain::GetMidDomainSiteCount() const
+    Vec16 Domain::GetBlockIJK(site_t block) const
     {
-        return total(&GetMidDomainCollisionCount(0));
+        auto& t = rank_for_site_store->GetTree();
+        return t.GetLeafCoords(block);
     }
-    site_t Domain::GetDomainEdgeSiteCount() const {
-        return total(&GetDomainEdgeCollisionCount(0));
-    }
-
-        Vec16 Domain::GetBlockIJK(site_t block) const
-        {
-            auto& t = rank_for_site_store->GetTree();
-            return t.GetLeafCoords(block);
-        }
-
-/*    void FieldData::SendAndReceive(hemelb::net::Net* net)
-    {
-      for (std::vector<NeighbouringProcessor>::const_iterator it = neighbouringProcs.begin();
-          it != neighbouringProcs.end(); ++it)
-      {
-        // Request the receive into the appropriate bit of FOld.
-        net->RequestReceive<distribn_t>(GetFOld( (*it).FirstSharedDistribution),
-                                        (int) ( ( (*it).SharedDistributionCount)),
-                                        (*it).Rank);
-        // Request the send from the right bit of FNew.
-        net->RequestSend<distribn_t>(GetFNew( (*it).FirstSharedDistribution),
-                                     (int) ( ( (*it).SharedDistributionCount)),
-                                     (*it).Rank);
-
-      }
-    }*/
-
-        /*void FieldData::CopyReceived()
-        {
-          // Copy the distribution functions received from the neighbouring
-          // processors into the destination buffer "f_new".
-          for (site_t i = 0; i < totalSharedFs; i++)
-          {
-            *GetFNew(streamingIndicesForReceivedDistributions[i]) =
-                *GetFOld(neighbouringProcs[0].FirstSharedDistribution + i);
-          }
-        }*/
 
         void Domain::Report(reporting::Dict& dictionary)
         {

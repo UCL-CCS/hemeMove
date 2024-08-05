@@ -36,7 +36,7 @@ class GeometryWriter {
   int headerStart;
   XdrWriter* headerEncoder;
   unsigned int headerBufferLength;
-  char* headerBuffer;
+  std::byte* headerBuffer;
 
   int bodyStart;
   FILE* bodyFile;

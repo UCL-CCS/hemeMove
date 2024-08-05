@@ -12,127 +12,113 @@
 #include "io/writers/XdrVectorWriter.h"
 #include "net/IOCommunicator.h"
 #include "util/span.h"
-#include "constants.h"
 #include "units.h"
 
 namespace hemelb::extraction
 {
     namespace
     {
-      // Declare recursive helper
-      template <typename... Ts>
-      io::Writer& encode(io::Writer& enc, Ts... args);
-      // Terminating case - one arg
-      template <typename T>
-      io::Writer& encode(io::Writer& enc, T arg) {
-	return enc << arg;
-      }
-      // Recursive case - N + 1 args
-      template <typename T, typename... Ts>
-      io::Writer& encode(io::Writer& enc, T arg, Ts... args) {
-	return encode(enc << arg, args...);
-      }
+        // Declare recursive helper
+        template <typename... Ts>
+        io::Writer& encode(io::Writer& enc, Ts... args);
+        // Terminating case - one arg
+        template <typename T>
+        io::Writer& encode(io::Writer& enc, T arg) {
+            return enc << arg;
+        }
+        // Recursive case - N + 1 args
+        template <typename T, typename... Ts>
+        io::Writer& encode(io::Writer& enc, T arg, Ts... args) {
+            return encode(enc << arg, args...);
+        }
 
-      // XDR encode some values and return the result buffer
-      template <typename... Ts>
-      std::vector<char> quick_encode(Ts... args) {
-	io::XdrVectorWriter encoder;
-	encode(encoder, args...);
-	auto ans = encoder.GetBuf();
-	return ans;
-      }
+        // XDR encode some values and return the result buffer
+        template <typename... Ts>
+        std::vector<std::byte> quick_encode(Ts... args) {
+            io::XdrVectorWriter encoder;
+            encode(encoder, args...);
+            auto ans = encoder.GetBuf();
+            return ans;
+        }
 
-      // Helper for writing values converted to the type contained in
-      // the code::Type variant tag value.
-      //
-      // Use of std::variant + visit ensures that we generate all the
-      // types required with only a single implementation.
-      template <typename XDRW, typename... MemTs>
-      void write(XDRW& writer, code::Type tc, MemTs... vals) {
-	using common_t = std::common_type_t<MemTs...>;
-	static_assert(std::conjunction_v<std::is_same<common_t, MemTs>...>,
-		      "Values must be of uniform type");
+        // Helper for writing values converted to the type contained in
+        // the code::Type variant tag value.
+        //
+        // Use of std::variant + visit ensures that we generate all the
+        // types required with only a single implementation.
+        template <typename XDRW, typename... MemTs>
+        void write(XDRW& writer, code::Type tc, MemTs... vals) {
+            using common_t = std::common_type_t<MemTs...>;
+            static_assert(std::conjunction_v<std::is_same<common_t, MemTs>...>,
+                          "Values must be of uniform type");
 
-	std::visit([&] (auto tag) {
-	    using FileT = decltype(tag);
-	    (writer << ... << FileT(vals));
-	  },
-	  tc);
-      }
+            std::visit([&] (auto tag) {
+                           using FileT = decltype(tag);
+                           (writer << ... << FileT(vals));
+                       },
+                       tc);
+        }
 
     }  // namespace
 
     static unsigned CalcFieldHeaderLength(std::vector<OutputField> const& fields);
 
-    LocalPropertyOutput::LocalPropertyOutput(IterableDataSource& dataSource,
+    LocalPropertyOutput::LocalPropertyOutput(std::shared_ptr<IterableDataSource> dataSource,
                                              const PropertyOutputFile& outputSpec_,
-                                             const net::IOCommunicator& ioComms) :
-        comms(ioComms), dataSource(dataSource), outputSpec(outputSpec_)
+                                             net::IOCommunicator ioComms) :
+            comms(std::move(ioComms)), dataSource(std::move(dataSource)), outputSpec(outputSpec_)
     {
-      if (std::holds_alternative<multi_timestep_file>(outputSpec.ts_mode)) {
-	// Just replace extension with .off
-	offset_file_name = io::formats::offset::ExtractionToOffset(outputSpec.filename);
-	// empty output_file_pattern is OK
-      } else if (std::holds_alternative<single_timestep_files>(outputSpec.ts_mode)) {
-	// Get views of the whole path
-	std::string_view p = outputSpec.filename.native();
-	auto i_pcd = p.find("%d", 0, 2);
-	// The part before %d
-	auto beginning = p.substr(0, i_pcd);
-	// The part after
-	auto end = p.substr(i_pcd + 2);
-	// Construct the path without '%d'
-	std::string basename{beginning};
-	basename += end;
-	// Use this to compute offset file name
-	offset_file_name = io::formats::offset::ExtractionToOffset(basename);
-	// Build the pattern
-	output_file_pattern += beginning;
-	output_file_pattern += "%*ld";
-	output_file_pattern += end;
-      }
+        if (std::holds_alternative<multi_timestep_file>(outputSpec.ts_mode)) {
+            // Just replace extension with .off
+            offset_file_name = io::formats::offset::ExtractionToOffset(outputSpec.filename);
+            // empty output_file_pattern is OK
+        } else if (std::holds_alternative<single_timestep_files>(outputSpec.ts_mode)) {
+            // Get views of the whole path
+            output_file_pattern = io::TimePattern(outputSpec.filename.native());
+            offset_file_name = io::formats::offset::ExtractionToOffset(output_file_pattern.Strip());
+        }
 
-      header_length = io::formats::extraction::MainHeaderLength + CalcFieldHeaderLength(outputSpec.fields);
+        header_length = io::formats::extraction::MainHeaderLength + CalcFieldHeaderLength(outputSpec.fields);
 
-      // Count sites on this rank
-      local_site_count = CountWrittenSitesOnRank();
-      global_site_count = comms.AllReduce(local_site_count, MPI_SUM);
+        // Count sites on this rank
+        local_site_count = CountWrittenSitesOnRank();
+        global_site_count = comms.AllReduce(local_site_count, MPI_SUM);
 
-      // Calculate how long local writes need to be (recall only IO
-      // rank writes the timestep).
-      auto const site_len = CalcSiteWriteLen(outputSpec.fields);
-      local_data_write_length = local_site_count * site_len  + (comms.OnIORank() ? 8U : 0U);
-      // Everyone needs to know the total length written during one iteration
-      global_data_write_length = site_len * global_site_count + 8U;
+        // Calculate how long local writes need to be (recall only IO
+        // rank writes the timestep).
+        auto const site_len = CalcSiteWriteLen(outputSpec.fields);
+        local_data_write_length = local_site_count * site_len  + (comms.OnIORank() ? 8U : 0U);
+        // Everyone needs to know the total length written during one iteration
+        global_data_write_length = site_len * global_site_count + 8U;
 
-      // Work out the offset for where this rank writes its data
-      auto const local_write_end = comms.Scan(local_data_write_length, MPI_SUM) + header_length;
-      local_write_start = local_write_end - local_data_write_length;
+        // Work out the offset for where this rank writes its data
+        auto const local_write_end = comms.Scan(local_data_write_length, MPI_SUM) + header_length;
+        local_write_start = local_write_end - local_data_write_length;
 
-      // Prepare the header information on the IO proc.
-      if (comms.OnIORank())
-      {
-	header_data = PrepareHeader();
-      }
+        // Prepare the header information on the IO proc.
+        if (comms.OnIORank())
+        {
+            header_data = PrepareHeader();
+        }
 
-      // Create the buffer that we'll write each iteration's data into.
-      buffer.resize(local_data_write_length);
+        // Create the buffer that we'll write each iteration's data into.
+        buffer.resize(local_data_write_length);
 
-      // Write the offset file
-      WriteOffsetFile();
+        // Write the offset file
+        WriteOffsetFile();
 
-      // If we are doing all timesteps in one file, set it up now.
-      if (std::holds_alternative<multi_timestep_file>(outputSpec.ts_mode)) {
-	StartFile(outputSpec.filename);
-      }
+        // If we are doing all timesteps in one file, set it up now.
+        if (std::holds_alternative<multi_timestep_file>(outputSpec.ts_mode)) {
+            StartFile(outputSpec.filename);
+        }
     }
 
     uint64_t LocalPropertyOutput::CountWrittenSitesOnRank() {
       auto n = uint64_t{0};
-      dataSource.Reset();
-      while (dataSource.ReadNext())
+      dataSource->Reset();
+      while (dataSource->ReadNext())
       {
-	if (outputSpec.geometry->Include(dataSource, dataSource.GetPosition()))
+	if (outputSpec.geometry->Include(*dataSource, dataSource->GetPosition()))
         {
 	  ++n;
 	}
@@ -153,7 +139,7 @@ namespace hemelb::extraction
 	if (n == 0 || n == 1 || n == len) {
 	  // ok
 	} else {
-	  throw Exception() << "Invalid length of offsets array " << n;
+	  throw (Exception() << "Invalid length of offsets array " << n);
 	}
         site_len += len * code::type_to_size(f.typecode);
       }
@@ -176,40 +162,84 @@ namespace hemelb::extraction
       );
     }
 
-    std::vector<char> LocalPropertyOutput::PrepareHeader() const {
+    std::vector<std::byte> LocalPropertyOutput::PrepareHeader() const {
 
-      unsigned const field_header_len = CalcFieldHeaderLength(outputSpec.fields);
-      unsigned const total_header_len = io::formats::extraction::MainHeaderLength + field_header_len;
-      io::XdrVectorWriter headerWriter;
+        unsigned const field_header_len = CalcFieldHeaderLength(outputSpec.fields);
+        unsigned const total_header_len = io::formats::extraction::MainHeaderLength + field_header_len;
+        io::XdrVectorWriter headerWriter;
 
-      // Encoder for ONLY the main header (note shorter length)
-      headerWriter << std::uint32_t(io::formats::HemeLbMagicNumber)
-		   << std::uint32_t(io::formats::extraction::MagicNumber)
-		   << std::uint32_t(io::formats::extraction::VersionNumber);
-      headerWriter << double(dataSource.GetVoxelSize());
-      const util::Vector3D<distribn_t> &origin = dataSource.GetOrigin();
-      headerWriter << double(origin[0]) << double(origin[1]) << double(origin[2]);
+        // Encoder for ONLY the main header (note shorter length)
+        headerWriter << std::uint32_t(io::formats::HemeLbMagicNumber)
+                     << std::uint32_t(io::formats::extraction::MagicNumber)
+                     << std::uint32_t(io::formats::extraction::VersionNumber);
 
-      // Write the total site count and number of fields
-      headerWriter << std::uint64_t(global_site_count) << std::uint32_t(outputSpec.fields.size())
-		   << std::uint32_t(field_header_len);
+        // Parameters to convert from lattice units to physical
+        auto dx = dataSource->GetVoxelSize();
+        auto dt = dataSource->GetTimeStep();
+        auto dm = dataSource->GetMassScale();
+        headerWriter << dx << dt <<dm;
 
-      // Main header now finished - do field headers
-      for (auto& field: outputSpec.fields) {
-	auto const len = GetFieldLength(field.src);
-	headerWriter << field.name
-		     << uint32_t(len)
-		     << uint32_t(code::type_to_enum(field.typecode))
-		     << field.noffsets;
-	std::visit([&](auto&& tag) {
-	    for(auto& offset: field.offset)
-	      headerWriter << (decltype(tag))offset;
-	  },
-	  field.typecode);
-      }
+        auto& origin = dataSource->GetOrigin();
+        headerWriter << origin[0] << origin[1] << origin[2];
+        headerWriter << dataSource->GetReferencePressure();
 
-      HASSERT(headerWriter.GetBuf().size() == total_header_len);
-      return headerWriter.GetBuf();
+        // Write the total site count and number of fields
+        headerWriter << std::uint64_t(global_site_count) << std::uint32_t(outputSpec.fields.size())
+                     << std::uint32_t(field_header_len);
+
+        auto dPressure = dm / (dt*dt * dx);
+
+        // Main header now finished - do field headers
+        for (auto& field: outputSpec.fields) {
+            auto const len = GetFieldLength(field.src);
+            headerWriter << field.name
+                         << uint32_t(len)
+                         << uint32_t(code::type_to_enum(field.typecode))
+                         << field.noffsets;
+
+            double scale = overload_visit(field.src,
+                                          [&](source::Pressure) {
+                                              return dPressure;
+                                          },
+                                          [&](source::Velocity) {
+                                              return dx / dt;
+                                          },
+                                          [&](source::ShearStress) {
+                                              return dPressure;
+                                          },
+                                          [&](source::VonMisesStress) {
+                                              return dPressure;
+                                          },
+                                          [&](source::ShearRate) {
+                                              return 1.0 / dt;
+                                          },
+                                          [&](source::StressTensor) {
+                                              return dPressure;
+                                          },
+                                          [&](source::Traction) {
+                                              return dPressure;
+                                          },
+                                          [&](source::TangentialProjectionTraction) {
+                                              return dPressure;
+                                          },
+                                          [](source::Distributions) {
+                                              return 0.0;
+                                          },
+                                          [](source::MpiRank) {
+                                              return 0.0;
+                                          }
+            );
+            std::visit([&](auto&& tag) {
+                           using T = decltype(tag);
+                           for(auto& offset: field.offset)
+                               headerWriter << T(offset);
+                           headerWriter << T(scale);
+                       },
+                       field.typecode);
+        }
+
+        HASSERT(headerWriter.GetBuf().size() == total_header_len);
+        return headerWriter.GetBuf();
     }
 
     bool LocalPropertyOutput::ShouldWrite(unsigned long timestepNumber) const
@@ -237,131 +267,118 @@ namespace hemelb::extraction
       }
     }
 
-    template <typename... Ts>
-    std::string safe_fmt(std::string const& pattern, Ts... args) {
-        int sz = std::snprintf(nullptr, 0,
-                               pattern.data(), args...);
-        if (sz < 0)
-            throw Exception() << "Formatting error";
-
-        // +1 for the null terminator
-        std::string ans(sz + 1, '\0');
-        std::snprintf(ans.data(), ans.size(),
-                      pattern.data(), args...);
-        return ans;
-    }
-
-    void LocalPropertyOutput::Write(unsigned long timestepNumber, unsigned long totalSteps)
+    std::optional<std::filesystem::path>
+    LocalPropertyOutput::Write(unsigned long timestepNumber, unsigned long totalSteps)
     {
         // Don't write if we shouldn't this iteration.
         if (!ShouldWrite(timestepNumber))
         {
-            return;
+            return std::nullopt;
         }
 
+        std::filesystem::path ans;
         if (std::holds_alternative<single_timestep_files>(outputSpec.ts_mode)) {
-            int prec = 3;
-            unsigned long next = 1000;
-            while (totalSteps > next) {
-                prec += 1;
-                next *= 10;
-            }
-            std::string fn = safe_fmt(output_file_pattern, prec, timestepNumber);
+            std::string fn = output_file_pattern.Format(timestepNumber, totalSteps);
             StartFile(fn);
+            ans = fn;
+        } else {
+            ans = outputSpec.filename;
         }
 
-      // Don't write if this core doesn't do anything.
-      if (local_data_write_length > 0)
-      {
-	// Create the buffer.
-	auto xdrWriter = io::MakeXdrWriter(buffer.begin(), buffer.end());
+        // Don't write if this core doesn't do anything.
+        if (local_data_write_length > 0)
+        {
+            // Create the buffer.
+            auto xdrWriter = io::MakeXdrWriter(buffer.begin(), buffer.end());
 
-	// Firstly, the IO proc must write the iteration number.
-	if (comms.OnIORank())
-	{
-	  xdrWriter << (uint64_t) timestepNumber;
-	}
+            // Firstly, the IO proc must write the iteration number.
+            if (comms.OnIORank())
+            {
+                xdrWriter << (uint64_t) timestepNumber;
+            }
 
-	dataSource.Reset();
+            dataSource->Reset();
 
-	while (dataSource.ReadNext())
-	{
-	  const util::Vector3D<site_t>& position = dataSource.GetPosition();
-	  if (outputSpec.geometry->Include(dataSource, position))
-	  {
-	    // Write the position
-	    xdrWriter << (uint32_t) position.x() << (uint32_t) position.y() << (uint32_t) position.z();
+            while (dataSource->ReadNext())
+            {
+                const util::Vector3D<site_t>& position = dataSource->GetPosition();
+                if (outputSpec.geometry->Include(*dataSource, position))
+                {
+                    // Write the position
+                    xdrWriter << (uint32_t) position.x() << (uint32_t) position.y() << (uint32_t) position.z();
 
-	    // Write for each field.
-	    for (auto& fieldSpec: outputSpec.fields)
-	    {
-	      overload_visit(
-	        fieldSpec.src,
-		[&](source::Pressure) {
-		  write(xdrWriter, fieldSpec.typecode, dataSource.GetPressure() - fieldSpec.offset[0]);
-		},
-		[&](source::Velocity) {
-		  auto&& v = dataSource.GetVelocity();
-		  write(xdrWriter, fieldSpec.typecode, v.x(), v.y(), v.z());
-		},
-		//! @TODO: Work out how to handle the different stresses.
-		[&](source::VonMisesStress) {
-		  write(xdrWriter, fieldSpec.typecode, dataSource.GetVonMisesStress());
-		},
-		[&](source::ShearStress) {
-		  write(xdrWriter, fieldSpec.typecode, dataSource.GetShearStress());
-		},
-		[&](source::ShearRate) {
-		  write(xdrWriter, fieldSpec.typecode, dataSource.GetShearRate());
-		},
-		[&](source::StressTensor) {
-		  util::Matrix3D tensor = dataSource.GetStressTensor();
-		  // Only the upper triangular part of the symmetric
-		  // tensor is stored. Storage is row-wise.
-		  write(xdrWriter, fieldSpec.typecode,
-			tensor[0][0], tensor[0][1], tensor[0][2],
-                                      tensor[1][1], tensor[1][2],
-                                                    tensor[2][2]);
-		},
-		[&](source::Traction) {
-		  auto&& t = dataSource.GetTraction();
-		  write(xdrWriter, fieldSpec.typecode, t.x(), t.y(), t.z());
-		},
-		[&](source::TangentialProjectionTraction) {
-		  auto&& t = dataSource.GetTangentialProjectionTraction();
-		  write(xdrWriter, fieldSpec.typecode, t.x(), t.y(), t.z());
-		},
-		[&](source::Distributions) {
-		  unsigned numComponents = dataSource.GetNumVectors();
-		  distribn_t const* d_ptr = dataSource.GetDistribution();
-		  for (auto i = 0U; i < numComponents; i++)
-		  {
-		    write(xdrWriter, fieldSpec.typecode, d_ptr[i]);
-		  }
-		},
-		[&](source::MpiRank) {
-		  write(xdrWriter, fieldSpec.typecode, comms.Rank());
-		}
-              );
-	    }
-	  }
-	}
+                    // Write for each field.
+                    for (auto& fieldSpec: outputSpec.fields)
+                    {
+                        overload_visit(
+                                fieldSpec.src,
+                                [&](source::Pressure) {
+                                    write(xdrWriter, fieldSpec.typecode, dataSource->GetPressure() - fieldSpec.offset[0]);
+                                },
+                                [&](source::Velocity) {
+                                    auto&& v = dataSource->GetVelocity();
+                                    write(xdrWriter, fieldSpec.typecode, v.x(), v.y(), v.z());
+                                },
+                                //! @TODO: Work out how to handle the different stresses.
+                                [&](source::VonMisesStress) {
+                                    write(xdrWriter, fieldSpec.typecode, dataSource->GetVonMisesStress());
+                                },
+                                [&](source::ShearStress) {
+                                    write(xdrWriter, fieldSpec.typecode, dataSource->GetShearStress());
+                                },
+                                [&](source::ShearRate) {
+                                    write(xdrWriter, fieldSpec.typecode, dataSource->GetShearRate());
+                                },
+                                [&](source::StressTensor) {
+                                    util::Matrix3D tensor = dataSource->GetStressTensor();
+                                    // Only the upper triangular part of the symmetric
+                                    // tensor is stored. Storage is row-wise.
+                                    write(xdrWriter, fieldSpec.typecode,
+                                          tensor[0][0], tensor[0][1], tensor[0][2],
+                                          tensor[1][1], tensor[1][2],
+                                          tensor[2][2]);
+                                },
+                                [&](source::Traction) {
+                                    auto&& t = dataSource->GetTraction();
+                                    write(xdrWriter, fieldSpec.typecode, t.x(), t.y(), t.z());
+                                },
+                                [&](source::TangentialProjectionTraction) {
+                                    auto&& t = dataSource->GetTangentialProjectionTraction();
+                                    write(xdrWriter, fieldSpec.typecode, t.x(), t.y(), t.z());
+                                },
+                                [&](source::Distributions) {
+                                    unsigned numComponents = dataSource->GetNumVectors();
+                                    distribn_t const* d_ptr = dataSource->GetDistribution();
+                                    for (auto i = 0U; i < numComponents; i++)
+                                    {
+                                        write(xdrWriter, fieldSpec.typecode, d_ptr[i]);
+                                    }
+                                },
+                                [&](source::MpiRank) {
+                                    write(xdrWriter, fieldSpec.typecode, comms.Rank());
+                                }
+                        );
+                    }
+                }
+            }
 
-	// Actually do the MPI writing.
-	outputFile.WriteAt(local_write_start, to_const_span(buffer));
+        // Actually do the MPI writing.
+        outputFile.WriteAt(local_write_start, to_const_span(buffer));
       }
 
-      overload_visit(
-        outputSpec.ts_mode,
-	[this](multi_timestep_file) {
-	  // Set the offset to the right place for writing on the next
-	  // iteration.
-	  local_write_start += global_data_write_length;
-	},
-	[this](single_timestep_files) {
-	  outputFile.Close();
-	}
-      );
+        overload_visit(
+                outputSpec.ts_mode,
+                [this](multi_timestep_file) {
+                    // Set the offset to the right place for writing on the next
+                    // iteration.
+                    local_write_start += global_data_write_length;
+                },
+                [this](single_timestep_files) {
+                    outputFile.Close();
+                }
+        );
+
+        return ans;
     }
 
     // Write the offset file.
@@ -423,7 +440,7 @@ namespace hemelb::extraction
 	  return 3U;
 	},
 	[&](source::Distributions) {
-	  return dataSource.GetNumVectors();
+	  return dataSource->GetNumVectors();
 	},
 	[](source::MpiRank) {
 	  return 1U;

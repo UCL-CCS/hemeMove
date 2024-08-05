@@ -8,20 +8,18 @@
 
 #include "reporting/Dict.h"
 
-namespace hemelb
+
+namespace hemelb::reporting
 {
-  namespace reporting
-  {
     /**
      * Defines the interface for classes that can have entries in reports.
      */
     class Reportable
     {
-      public:
+    public:
         virtual ~Reportable() noexcept = default;
         virtual void Report(Dict& dictionary) = 0;
     };
-  }
 }
 
 #endif /* HEMELB_REPORTING_REPORTABLE_H */

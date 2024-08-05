@@ -5,41 +5,28 @@
 
 #include "extraction/PropertyWriter.h"
 
-namespace hemelb
+namespace hemelb::extraction
 {
-  namespace extraction
-  {
-    PropertyWriter::PropertyWriter(IterableDataSource& dataSource,
+    PropertyWriter::PropertyWriter(std::shared_ptr<IterableDataSource> dataSource,
                                    const std::vector<PropertyOutputFile>& propertyOutputs,
-                                   const net::IOCommunicator& ioComms)
+                                   net::IOCommunicator const& ioComms)
     {
-      for (unsigned outputNumber = 0; outputNumber < propertyOutputs.size(); ++outputNumber)
+      for (const auto& propertyOutput : propertyOutputs)
       {
-        localPropertyOutputs.push_back(new LocalPropertyOutput(dataSource,
-                                                               propertyOutputs[outputNumber],
-                                                               ioComms));
+        localPropertyOutputs.emplace_back(dataSource, propertyOutput, ioComms);
       }
     }
 
-    PropertyWriter::~PropertyWriter()
-    {
-      for (unsigned outputNumber = 0; outputNumber < localPropertyOutputs.size(); ++outputNumber)
-      {
-        delete localPropertyOutputs[outputNumber];
-      }
-    }
-
-    const std::vector<LocalPropertyOutput*>& PropertyWriter::GetPropertyOutputs() const
+    const std::vector<LocalPropertyOutput>& PropertyWriter::GetPropertyOutputs() const
     {
       return localPropertyOutputs;
     }
 
-    void PropertyWriter::Write(unsigned long iterationNumber, unsigned long totalSteps) const
+    void PropertyWriter::Write(unsigned long iterationNumber, unsigned long totalSteps)
     {
-      for (unsigned outputNumber = 0; outputNumber < localPropertyOutputs.size(); ++outputNumber)
+      for (auto& localPropertyOutput : localPropertyOutputs)
       {
-        localPropertyOutputs[outputNumber]->Write((uint64_t) iterationNumber, totalSteps);
+        localPropertyOutput.Write((uint64_t) iterationNumber, totalSteps);
       }
     }
-  }
 }

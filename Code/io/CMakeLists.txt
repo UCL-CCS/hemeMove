@@ -12,7 +12,6 @@ endif()
 
 add_library(hemelb_io OBJECT
   FILE.cc
-  PathManager.cc 
   writers/AsciiFileWriter.cc writers/AsciiStreamWriter.cc
   readers/XdrFileReader.cc
   readers/XdrMemReader.cc
@@ -22,13 +21,15 @@ add_library(hemelb_io OBJECT
   writers/XdrVectorWriter.cc
   writers/NullWriter.cc
   writers/Writer.cc
-  formats/geometry.cc
   xml.cc
-  )
+  Checkpointer.cc
+  TimePattern.cc
+  hexfloat.cc
+)
 
 target_link_libraries(hemelb_io PUBLIC
   hemelb_util
   )
 target_link_libraries(hemelb_io PRIVATE
-  TinyXML::TinyXML
+  tinyxml2::tinyxml2
   )

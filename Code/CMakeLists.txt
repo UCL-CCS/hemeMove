@@ -23,16 +23,11 @@ include(HemeLbOptions)
 
 # Add warnings flags to development build types
 if (HEMELB_USE_ALL_WARNINGS_GNU)
-  set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall")
   set( CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -Wall")
 endif()
 
+# Definitions that are should be globally available
 add_definitions(-DHEMELB_CODE)
-add_definitions(-DHEMELB_COMPUTE_ARCHITECTURE=${HEMELB_COMPUTE_ARCHITECTURE})
-
-if(HEMELB_VALIDATE_GEOMETRY)
-  add_definitions(-DHEMELB_VALIDATE_GEOMETRY)
-endif()
 
 if (HEMELB_USE_SSE3)
   add_definitions(-DHEMELB_USE_SSE3)
@@ -47,33 +42,27 @@ if (HEMELB_CALLGRIND)
   add_definitions(-DHEMELB_CALLGRIND)
 endif()
 
-if (HEMELB_USE_VELOCITY_WEIGHTS_FILE)
-  add_definitions(-DHEMELB_USE_VELOCITY_WEIGHTS_FILE)
-endif()
-
-if (HEMELB_USE_KRUEGER_ORDERING)
-  add_definitions(-DHEMELB_USE_KRUEGER_ORDERING)
-endif()
-
 list(APPEND CMAKE_PREFIX_PATH ${HEMELB_DEPENDENCIES_INSTALL_PREFIX})
-# list(APPEND CMAKE_INCLUDE_PATH ${HEMELB_DEPENDENCIES_INSTALL_PREFIX}/include)
-# list(APPEND CMAKE_LIBRARY_PATH ${HEMELB_DEPENDENCIES_INSTALL_PREFIX}/lib)
 
 #--- Set up runtime search path for DLLs -----
 if(HEMELB_DEPENDENCIES_SET_RPATH)
-  SET(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
-  SET(CMAKE_INSTALL_RPATH "${HEMELB_DEPENDENCIES_INSTALL_PREFIX}/lib")
+  set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+  set(CMAKE_INSTALL_RPATH "${HEMELB_DEPENDENCIES_INSTALL_PREFIX}/lib")
 endif()
 
 include(build_environment)
 include(platform_checks)
 include(codesign)
-include(mpi)
 include(HemeLbDependency)
 
-find_hemelb_dependency(Boost REQUIRED)
-find_hemelb_dependency(TinyXML REQUIRED)
+# We do NOT want the removed MPI 2 C++ bindings
+# Requesting MPI 3 should be enough, but some configurations of
+# e.g. OpenMPI enable them for C++ by default to be "helpful".
+set(MPI_CXX_SKIP_MPICXX ON)
+find_package(MPI 3 REQUIRED CXX)
 
+find_hemelb_dependency(Boost REQUIRED)
+find_hemelb_dependency(tinyxml2 REQUIRED)
 find_hemelb_dependency(ParMETIS REQUIRED)
 find_hemelb_dependency(CTemplate REQUIRED)
 find_hemelb_dependency(ZLIB REQUIRED)
@@ -129,14 +118,13 @@ configure_file(build_info.h.in build_info.h)
 include_directories("${PROJECT_BINARY_DIR}")
 
 # ----------- HemeLB ------------------
-if (APPLE)
-  add_definitions(-DHEMELB_CFG_ON_BSD -DHEMELB_CFG_ON_OSX)
-endif()
 if (HEMELB_USE_DEBUGGER)
   # Force a debug build, because the debugger makes no sense without debug symbols
   set(CMAKE_BUILD_TYPE Debug)
 endif()
 
+add_library(hemelb_sim OBJECT SimulationController.cc)
+list(APPEND heme_libraries hemelb_sim)
 add_executable(${HEMELB_EXECUTABLE} main.cc)
 codesign(${HEMELB_EXECUTABLE})
 

@@ -6,14 +6,8 @@
 #include "net/IteratedAction.h"
 #include "net/phased/StepManager.h"
 
-namespace hemelb
+namespace hemelb::net
 {
-  namespace net
-  {
-    IteratedAction::~IteratedAction()
-    {
-
-    }
 
     bool IteratedAction::CallAction(int action)
     {
@@ -63,5 +57,4 @@ namespace hemelb
     {
 
     }
-  }
 }

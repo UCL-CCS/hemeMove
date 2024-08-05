@@ -15,6 +15,7 @@
 #include <vtkXMLPolyDataReader.h>
 #include <vtkXMLPolyDataWriter.h>
 
+#include "log/Logger.h"
 #include "redblood/Cell.h"
 #include "redblood/CellBase.h"
 #include "redblood/CellEnergy.h"
@@ -31,28 +32,28 @@ namespace hemelb::redblood {
     }
 
     void MeshIO::writeFile(std::string const &filename,
-			   MeshData const& mesh, util::UnitConverter const& c, PointScalarData const& data) const {
+			   MeshData const& mesh, util::UnitConverter const* c, PointScalarData const& data) const {
       writeFile(filename, mesh.vertices, mesh.facets, c, data);
     }
 
     void MeshIO::writeFile(std::string const &filename,
 			   MeshData::Vertices const& vertices, MeshData::Facets const& facets,
-			   util::UnitConverter const& c, PointScalarData const& data) const {
+			   util::UnitConverter const* c, PointScalarData const& data) const {
       write(Storage::file, filename, vertices, facets, c, data);
     }
 
-    std::string MeshIO::writeString(MeshData const& mesh, util::UnitConverter const& c, PointScalarData const& data) const {
+    std::string MeshIO::writeString(MeshData const& mesh, util::UnitConverter const* c, PointScalarData const& data) const {
       return writeString(mesh.vertices, mesh.facets, c, data);
     }
 
-    std::string MeshIO::writeString(MeshData::Vertices const& vertices, MeshData::Facets const& facets, util::UnitConverter const& c, PointScalarData const& data) const {
+    std::string MeshIO::writeString(MeshData::Vertices const& vertices, MeshData::Facets const& facets, util::UnitConverter const* c, PointScalarData const& data) const {
       return write(Storage::string, std::string{}, vertices, facets, c, data);
     }
 
-    void MeshIO::writeFile(std::string const& filename, CellBase const& cell, util::UnitConverter const& c) const {
+    void MeshIO::writeFile(std::string const& filename, CellBase const& cell, util::UnitConverter const* c) const {
       writeFile(filename, cell.GetVertices(), cell.GetFacets(), c);
     }
-    std::string MeshIO::writeString(CellBase const& cell, util::UnitConverter const& c) const {
+    std::string MeshIO::writeString(CellBase const& cell, util::UnitConverter const* c) const {
       return writeString(cell.GetVertices(), cell.GetFacets(), c);
     }
 
@@ -103,10 +104,10 @@ namespace hemelb::redblood {
       return fields;
     }
 
-    void MeshIO::writeFile(std::string const& filename, Cell const& cell, util::UnitConverter const& c) const {
+    void MeshIO::writeFile(std::string const& filename, Cell const& cell, util::UnitConverter const* c) const {
       writeFile(filename, cell.GetVertices(), cell.GetTemplateMesh().GetFacets(), c, make_forces(cell));
     }
-    std::string MeshIO::writeString(Cell const& cell, util::UnitConverter const& c) const {
+    std::string MeshIO::writeString(Cell const& cell, util::UnitConverter const* c) const {
       return writeString(cell.GetVertices(), cell.GetTemplateMesh().GetFacets(), c, make_forces(cell));
     }
 
@@ -209,7 +210,7 @@ namespace hemelb::redblood {
         }
     }
 
-    static void write_krueger_mesh(std::ostream &stream, MeshData::Vertices const& vertices, MeshData::Facets const& facets, util::UnitConverter const& converter)
+    static void write_krueger_mesh(std::ostream &stream, MeshData::Vertices const& vertices, MeshData::Facets const& facets, util::UnitConverter const* converter)
     {
       // Write Header
       stream << "$MeshFormat\n2 0 8\n$EndMeshFormat\n" << "$Nodes\n" << vertices.size()
@@ -218,10 +219,15 @@ namespace hemelb::redblood {
       auto i_vertex = vertices.begin();
       auto const i_vertex_end = vertices.end();
 
-      for (unsigned i(1); i_vertex != i_vertex_end; ++i_vertex, ++i)
+      for (unsigned i = 1; i_vertex != i_vertex_end; ++i_vertex, ++i)
       {
-        auto const vertex = converter.ConvertPositionToPhysicalUnits(*i_vertex);
-        stream << i << " " << vertex[0] << " " << vertex[1] << " " << vertex[2] << "\n";
+          if (converter) {
+              auto const vertex = converter->ConvertPositionToPhysicalUnits(*i_vertex);
+              stream << i << " " << vertex[0] << " " << vertex[1] << " " << vertex[2] << "\n";
+          } else {
+              auto&& vertex = *i_vertex;
+              stream << i << " " << vertex[0] << " " << vertex[1] << " " << vertex[2] << "\n";
+          }
       }
 
       stream << "$EndNode\n" << "$Elements\n" << facets.size() << "\n";
@@ -238,34 +244,34 @@ namespace hemelb::redblood {
 
     std::string KruegerMeshIO::write(Storage m, std::string const& filename,
                                      MeshData::Vertices const& vertices, MeshData::Facets const& facets,
-                                     util::UnitConverter const& c, PointScalarData const& data) const {
-      if (!data.empty()) {
-	std::string msg{"Krueger mesh IO does not support point data. Omitting fields:"};
-	for (auto&& pair: data) {
-	  msg += " " + pair.first;
-	}
-	log::Logger::Log<log::Warning, log::Singleton>(msg);
-      }
+                                     util::UnitConverter const* c, PointScalarData const& data) const {
+        if (!data.empty()) {
+            std::string msg{"Krueger mesh IO does not support point data. Omitting fields:"};
+            for (auto&& pair: data) {
+                msg += " " + pair.first;
+            }
+            log::Logger::Log<log::Warning, log::Singleton>(msg);
+        }
 
-      switch (m) {
-      case Storage::file:
-	{
-	  log::Logger::Log<log::Debug, log::Singleton>("Writing red blood cell to %s",
-						       filename.c_str());
-	  std::ofstream file(filename.c_str());
-	  assert(file.is_open());
-	  write_krueger_mesh(file, vertices, facets, c);
-	  return {};
-	}
-      case Storage::string:
-	{
-	  std::ostringstream ss;
-	  write_krueger_mesh(ss, vertices, facets, c);
-	  return ss.str();
-	}
-      }
+        switch (m) {
+            case Storage::file:
+            {
+                log::Logger::Log<log::Debug, log::Singleton>("Writing red blood cell to %s",
+                                                             filename.c_str());
+                std::ofstream file(filename.c_str());
+                assert(file.is_open());
+                write_krueger_mesh(file, vertices, facets, c);
+                return {};
+            }
+            case Storage::string:
+            {
+                std::ostringstream ss;
+                write_krueger_mesh(ss, vertices, facets, c);
+                return ss.str();
+            }
+
+        }
     }
-
 
     //
     // VTK format
@@ -353,7 +359,7 @@ namespace hemelb::redblood {
 
     std::string VTKMeshIO::write(Storage m, std::string const &filename,
                                  MeshData::Vertices const& vertices, MeshData::Facets const& facets,
-                                 util::UnitConverter const& c, PointScalarData const& pt_scalar_fields) const {
+                                 util::UnitConverter const* c, PointScalarData const& pt_scalar_fields) const {
         VtkErrorsThrow t;
 
         // Build the vtkPolyData
@@ -361,10 +367,15 @@ namespace hemelb::redblood {
 
         // First, the points/vertices
         auto points = vtkSmartPointer<vtkPoints>::New();
+        points->SetDataTypeToDouble();
         points->SetNumberOfPoints(ssize(vertices));
         for (auto&& [i, v_lat]: util::enumerate(vertices)) {
-            auto const v = c.ConvertPositionToPhysicalUnits(v_lat);
-            points->SetPoint(i, v.m_values.data());
+            if (c) {
+                auto const v = c->ConvertPositionToPhysicalUnits(v_lat);
+                points->SetPoint(i, v.m_values.data());
+            } else {
+                points->SetPoint(i, v_lat.m_values.data());
+            }
         }
         pd->SetPoints(points);
 

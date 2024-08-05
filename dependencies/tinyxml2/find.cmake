@@ -4,4 +4,4 @@
 # license in the file LICENSE.
 include_guard()
 
-find_package(TinyXML $ENV{DEPS_FIND_MODE_TinyXML})
+find_package(tinyxml2 $ENV{DEPS_FIND_MODE_tinyxml2})

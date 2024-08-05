@@ -30,7 +30,7 @@ namespace hemelb::io {
         return std::fwrite(buffer, size, count, _handle.get());
     }
 
-    long FILE::tell() {
+    long FILE::tell() const {
         return std::ftell(_handle.get());
     }
 

@@ -12,10 +12,11 @@
 
 #include "tests/helpers/HasCommsTestFixture.h"
 
-class TiXmlDocument;
+namespace hemelb::io::xml { class Document; }
+
 namespace hemelb::tests::helpers
 {
-    void ModifyXMLInput(TiXmlDocument &document, std::vector<std::string> const& elements,
+    void ModifyXMLInput(io::xml::Document &document, std::vector<std::string> const& elements,
                         std::string const& _value);
 
     //! \brief Modify XML document
@@ -26,12 +27,12 @@ namespace hemelb::tests::helpers
     //!   Should not include "hemelbsettings"
     //! \param[in] value: Value to set the attribute to
     template<class T>
-    void ModifyXMLInput(TiXmlDocument &document, std::vector<std::string> const& elements,
+    void ModifyXMLInput(io::xml::Document &document, std::vector<std::string> const& elements,
                         T const &_value)
     {
         std::ostringstream attr_value;
         attr_value << _value;
-	ModifyXMLInput(document, elements, attr_value.str());
+        ModifyXMLInput(document, elements, attr_value.str());
     }
 
     //! \brief Modify XML document by deleting an element if it exists
@@ -41,7 +42,7 @@ namespace hemelb::tests::helpers
     //! \param[in] elements: hierarchy of elements, last item will be removed.
     //!   Should not include "hemelbsettings"
     //! \param[in] value: Value to set the attribute to
-    void DeleteXMLInput(TiXmlDocument &document, std::vector<std::string> const& elements);
+    void DeleteXMLInput(io::xml::Document &document, std::vector<std::string> const& elements);
 
     class FolderTestFixture : public HasCommsTestFixture
     {

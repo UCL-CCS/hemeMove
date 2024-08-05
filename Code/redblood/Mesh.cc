@@ -25,15 +25,15 @@ namespace hemelb::redblood
     static_assert(std::is_same<IdType, vtkIdType>::value,
 		  "hemelb::redblood::IdType must be the same as vtkIdType");
 
-    LatticePosition barycenter(MeshData::Vertices const &vertices)
+    LatticePosition barycentre(MeshData::Vertices const &vertices)
     {
       typedef MeshData::Vertices::value_type Vertex;
       return std::accumulate(vertices.begin(), vertices.end(), Vertex(0, 0, 0))
           / Vertex::value_type(vertices.size());
     }
-    LatticePosition barycenter(MeshData const &mesh)
+    LatticePosition barycentre(MeshData const &mesh)
     {
-      return barycenter(mesh.vertices);
+      return barycentre(mesh.vertices);
     }
     LatticeVolume volume(MeshData::Vertices const &vertices, MeshData::Facets const &facets)
     {
@@ -160,22 +160,22 @@ namespace hemelb::redblood
 
     void Mesh::operator*=(Dimensionless const &scale)
     {
-      auto const barycenter = GetBarycenter();
+      auto const barycentre = GetBarycentre();
 
       for (auto &vertex : mesh->vertices)
       {
-        vertex = (vertex - barycenter) * scale + barycenter;
+        vertex = (vertex - barycentre) * scale + barycentre;
       }
     }
 
     void Mesh::operator*=(util::Matrix3D const &rotation)
     {
-      auto const barycenter = GetBarycenter();
+      auto const barycentre = GetBarycentre();
 
       for (auto &vertex : mesh->vertices)
       {
-        rotation.timesVector(vertex - barycenter, vertex);
-        vertex += barycenter;
+        rotation.timesVector(vertex - barycentre, vertex);
+        vertex += barycentre;
       }
     }
 

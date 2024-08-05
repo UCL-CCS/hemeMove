@@ -19,8 +19,8 @@ namespace hemelb::tests
       std::random_device rd;
       std::mt19937 g(rd());
 
-      int const nMids = domain.GetMidDomainCollisionCount(0);
-      int const nEdges = domain.GetDomainEdgeCollisionCount(0);
+      int const nMids = domain.GetMidDomainSiteCount(0);
+      int const nEdges = domain.GetDomainEdgeSiteCount(0);
       std::vector<LatticeVector> positions(c.Size() * (mid + edges));
       std::vector<int> shuf(nMids);
       std::iota(shuf.begin(), shuf.end(), 0);

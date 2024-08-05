@@ -16,4 +16,5 @@ add_library(hemelb_lb OBJECT
   kernels/CassonRheologyModel.cc kernels/TruncatedPowerLawRheologyModel.cc
   MacroscopicPropertyCache.cc SimulationState.cc StabilityTester.cc
   InitialCondition.cc
+        lb.cc
   )

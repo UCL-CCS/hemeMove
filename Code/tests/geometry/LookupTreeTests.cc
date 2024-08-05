@@ -215,7 +215,7 @@ namespace hemelb::tests
         CopyResourceToTempdir("large_cylinder.gmy");
         MoveToTempdir();
 
-        auto timings = std::make_unique<reporting::Timers>(Comms());
+        auto timings = std::make_unique<reporting::Timers>();
         auto reader = std::make_unique<geometry::GeometryReader>(lb::D3Q15::GetLatticeInfo(),
                                                                  *timings,
                                                                  Comms());

@@ -77,7 +77,7 @@ namespace hemelb
       SECTION("testSplittingCellSingleProc") {
 	auto const cell = std::make_shared<Cell>(icoSphere());
 	*cell *= 5e0;
-	*cell += LatticePosition(50, 50, 50) - cell->GetBarycenter();
+	*cell += LatticePosition(50, 50, 50) - cell->GetBarycentre();
 	auto splits = splitVertices < Stencil > (proc_at_pos, cell);
 	REQUIRE(size_t(1) == splits.size());
 	REQUIRE(size_t(1) == splits.count(0));
@@ -92,7 +92,7 @@ namespace hemelb
       SECTION("testSplittingCellMultiProcs") {
 	auto const cell = std::make_shared<Cell>(icoSphere());
 	*cell *= 5e0;
-	*cell += LatticePosition(1, 0, 1) * 50e0 - cell->GetBarycenter();
+	*cell += LatticePosition(1, 0, 1) * 50e0 - cell->GetBarycentre();
 	auto splits = splitVertices < Stencil > (proc_at_pos, cell);
 	REQUIRE(size_t(2) == splits.size());
 	REQUIRE(size_t(1) == splits.count(0));

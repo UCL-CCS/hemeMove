@@ -54,11 +54,24 @@ namespace hemelb::net
     }
 
     template<typename T>
+    MpiRequest MpiCommunicator::Iexscan(T const& val, T& dest, const MPI_Op &op) const
+    {
+        MpiRequest ans;
+        HEMELB_MPI_CALL(MPI_Iexscan, (&val, &dest, 1, MpiDataType<T>(), op, *this, &ans.req));
+        return ans;
+    }
+
+    template<typename T>
     T MpiCommunicator::Reduce(const T& val, const MPI_Op& op, const int root) const
     {
       T ans;
       HEMELB_MPI_CALL(MPI_Reduce, (&val, &ans, 1, MpiDataType<T>(), op, root, *this));
       return ans;
+    }
+    template<typename T, std::size_t N>
+    void MpiCommunicator::Reduce(std::span<T, N> dest, std::span<const T, N> vals, const MPI_Op& op, const int root) const
+    {
+        HEMELB_MPI_CALL(MPI_Reduce, (vals.data(), dest.data(), vals.size(), MpiDataType<T>(), op, root, *this));
     }
 
     template<typename T>
@@ -219,6 +232,19 @@ namespace hemelb::net
                       (vals.data(), vals.size(), MpiDataType<T>(), dest, tag, *this));
     }
 
+    template <typename T>
+    MpiRequest MpiCommunicator::Issend(std::span<T const> vals, int dest, int tag) const {
+        MpiRequest ans;
+        MpiCall{MPI_Issend}(vals.data(), vals.size(), MpiDataType<T>(), dest, tag, *commPtr, &ans.req);
+        return ans;
+    }
+    template <typename T>
+    MpiRequest MpiCommunicator::Issend(T const& val, int dest, int tag) const {
+        MpiRequest ans;
+        MpiCall{MPI_Issend}(&val, 1, MpiDataType<T>(), dest, tag, *commPtr, &ans.req);
+        return ans;
+    }
+
     template<typename T>
     void MpiCommunicator::Receive(T& val, int src, int tag, MPI_Status* stat) const
     {
@@ -230,6 +256,18 @@ namespace hemelb::net
       HEMELB_MPI_CALL(MPI_Recv, (vals.data(), vals.size(), MpiDataType<T>(), src, tag, *this, stat));
     }
 
+    template <typename T>
+    MpiRequest MpiCommunicator::Irecv(std::span<T> dest, int src, int tag) const {
+        MpiRequest ans;
+        MpiCall{MPI_Irecv}(dest.data(), dest.size(), MpiDataType<T>(), src, tag, *commPtr, &ans.req);
+        return ans;
+    }
+    template <typename T>
+    MpiRequest MpiCommunicator::Irecv(T &dest, int src, int tag) const {
+        MpiRequest ans;
+        MpiCall{MPI_Irecv}(&dest, 1, MpiDataType<T>(), src, tag, *commPtr, &ans.req);
+        return ans;
+    }
 }
 
 #endif // HEMELB_NET_MPICOMMUNICATOR_HPP

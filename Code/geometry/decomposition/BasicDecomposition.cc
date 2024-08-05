@@ -6,6 +6,7 @@
 #include "geometry/decomposition/BasicDecomposition.h"
 #include "geometry/GmyReadResult.h"
 #include "geometry/LookupTree.h"
+#include "log/Logger.h"
 #include "net/mpi.h"
 
 namespace hemelb::geometry::decomposition

@@ -5,10 +5,8 @@
 
 #include "net/MpiGroup.h"
 
-namespace hemelb
+namespace hemelb::net
 {
-  namespace net
-  {
     namespace
     {
       void Deleter(MPI_Group* comm)
@@ -44,16 +42,16 @@ namespace hemelb
     {
       MPI_Group ans;
       HEMELB_MPI_CALL(MPI_Group_excl,
-                      (*groupPtr, ranksToExclude.size(), ranksToExclude.data(), &ans))
-      return MpiGroup(ans, true);
+                      (*groupPtr, ranksToExclude.size(), ranksToExclude.data(), &ans));
+      return {ans, true};
     }
 
     MpiGroup MpiGroup::Include(const std::vector<int>& ranksToInclude)
     {
       MPI_Group ans;
       HEMELB_MPI_CALL(MPI_Group_incl,
-                      (*groupPtr, ranksToInclude.size(), ranksToInclude.data(), &ans))
-      return MpiGroup(ans, true);
+                      (*groupPtr, ranksToInclude.size(), ranksToInclude.data(), &ans));
+      return {ans, true};
     }
 
     MpiGroup::MpiGroup(MPI_Group grp, bool own)
@@ -66,10 +64,9 @@ namespace hemelb
         }
         else
         {
-          groupPtr.reset(new MPI_Group(grp));
+          groupPtr = std::make_shared<MPI_Group>(grp);
         }
       }
     }
 
-  }
 }

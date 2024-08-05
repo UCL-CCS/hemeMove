@@ -6,10 +6,8 @@
 #include "util/UnitConverter.h"
 #include "constants.h"
 
-namespace hemelb
+namespace hemelb::util
 {
-  namespace util
-  {
 
     UnitConverter::UnitConverter(PhysicalTime timeStep,
 				 PhysicalDistance voxelSize, PhysicalPosition latticeOrigin,
@@ -18,39 +16,39 @@ namespace hemelb
             latticeMass(fluidDensity * voxelSize * voxelSize * voxelSize),
             latticeSpeed(voxelSize / latticeTime), latticeOrigin(latticeOrigin),
             latticePressure(latticeMass / (latticeDistance * latticeTime * latticeTime)),
-            reference_pressure_mmHg(reference_pressure)
+            reference_pressure_Pa(reference_pressure)
     {
 
     }
 
     LatticePressure UnitConverter::ConvertPressureToLatticeUnits(PhysicalPressure pressure) const
     {
-      return Cs2 + ConvertPressureDifferenceToLatticeUnits(pressure - reference_pressure_mmHg);
+      return Cs2 + ConvertPressureDifferenceToLatticeUnits(pressure - reference_pressure_Pa);
     }
 
     PhysicalPressure UnitConverter::ConvertPressureToPhysicalUnits(LatticePressure pressure) const
     {
-      return reference_pressure_mmHg + ConvertPressureDifferenceToPhysicalUnits(pressure - Cs2);
+      return reference_pressure_Pa + ConvertPressureDifferenceToPhysicalUnits(pressure - Cs2);
     }
 
     LatticePressure UnitConverter::ConvertPressureDifferenceToLatticeUnits(
         PhysicalPressure pressure_diff) const
     {
-      return pressure_diff * mmHg_TO_PASCAL / latticePressure;
+      return pressure_diff / latticePressure;
     }
 
     PhysicalPressure UnitConverter::ConvertPressureDifferenceToPhysicalUnits(
         LatticePressure pressure_diff) const
     {
-      return pressure_diff * latticePressure / mmHg_TO_PASCAL;
+      return pressure_diff * latticePressure;
     }
 
     LatticePressureGradient UnitConverter::ConvertPressureGradientToLatticeUnits(PhysicalPressureGradient pg) const {
-        return pg * mmHg_TO_PASCAL * latticeDistance / latticePressure;
+        return pg * latticeDistance / latticePressure;
     }
 
     PhysicalPressureGradient UnitConverter::ConvertPressureGradientToPhysicalUnits(LatticePressureGradient pg) const {
-        return pg * latticePressure / (latticeDistance * mmHg_TO_PASCAL);
+        return pg * latticePressure / latticeDistance;
     }
 
     PhysicalReciprocalTime UnitConverter::ConvertShearRateToPhysicalUnits(
@@ -104,4 +102,3 @@ namespace hemelb
     }
 
   }
-}

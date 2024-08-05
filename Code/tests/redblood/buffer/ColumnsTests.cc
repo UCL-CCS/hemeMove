@@ -24,13 +24,13 @@ namespace hemelb::tests
         LatticeDistance const sep = 1;
 
         auto is_in_cylinder = [&cylinder](LatticePosition const &a, MeshData::Vertices const &verts) -> bool {
-            LatticePosition const barycenter = redblood::barycenter(verts);
+            LatticePosition const barycentre = redblood::barycentre(verts);
             LatticePosition const n0 = cylinder->normal.GetNormalised();
             if (Dot(a, cylinder->normal) < -1e-8) {
                 return false;
             }
             for (auto const &v : verts) {
-                LatticePosition const x = a + v - barycenter - cylinder->origin;
+                LatticePosition const x = a + v - barycentre - cylinder->origin;
                 if (Cross(x, n0).GetMagnitude() >= cylinder->radius) {
                     return false;
                 }
@@ -153,8 +153,8 @@ namespace hemelb::tests
 
 	auto check = [templateCell, &rotation, &is_in_cylinder, &approx](std::shared_ptr<CellBase const> acell) {
 	  auto const cell = std::static_pointer_cast<Cell const, CellBase const>(acell);
-	  auto const b0 = templateCell->GetBarycenter();
-	  auto const b1 = cell->GetBarycenter();
+	  auto const b0 = templateCell->GetBarycentre();
+	  auto const b1 = cell->GetBarycentre();
 	  auto const& vertices0 = templateCell->GetVertices();
 	  auto const& vertices1 = cell->GetVertices();
 	  REQUIRE(templateCell->GetNumberOfNodes() == cell->GetNumberOfNodes());

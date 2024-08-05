@@ -47,7 +47,7 @@ namespace hemelb::extraction
   // Namespace holding variant and helpers for the type to be saved to
   // the file.
   namespace code {
-    using io::formats::extraction::TypeCode;
+    using TypeCode = io::formats::extraction::TypeCode;
     using Type = std::variant<
       float,
       double,

@@ -1,9 +1,8 @@
 <?xml version="1.0" ?>
-<hemelbsettings version="5">
+<hemelbsettings version="6">
   <simulation>
     <steps value="3000" units="lattice" />
     <step_length value="0.0008571428571428571" units="s" />
-    <stresstype value="1" />
     <voxel_size value="4.0e-4" units="m" />
     <origin value="(-3.2e-3,-3.2e-3,-5.02e-2)" units="m" />
   </simulation>
@@ -12,14 +11,14 @@
   </geometry>
   <initialconditions>
     <pressure>
-      <uniform value="0.0" units="mmHg"/>
+      <uniform value="0.0" units="Pa"/>
     </pressure>
   </initialconditions>  
   <inlets>
     <inlet>
       <condition type="pressure" subtype="cosine">
-        <amplitude value="0.0" units="mmHg" />
-        <mean value="0.02" units="mmHg" />
+        <amplitude value="0.0" units="Pa" />
+        <mean value="0.02" units="Pa" />
         <phase value="0.0" units="rad" />
         <period value="0.8571428571428571" units="s" />
       </condition>
@@ -30,8 +29,8 @@
   <outlets>
     <outlet>
       <condition type="pressure" subtype="cosine">
-        <amplitude value="0.0" units="mmHg" />
-        <mean value="0.0" units="mmHg" />
+        <amplitude value="0.0" units="Pa" />
+        <mean value="0.0" units="Pa" />
         <phase value="0.0" units="rad" />
         <period value="0.8571428571428571" units="s" />
       </condition>
@@ -39,18 +38,6 @@
       <position value="(0.0,0.0,0.05)" units="m" />
     </outlet>
   </outlets>
-  <visualisation>
-    <centre value="(0.0,0.0,0.0)" units="m" />
-    <orientation>
-      <latitude value="45.0" units="deg" />
-      <longitude value="45.0" units="deg" />
-    </orientation>
-    <display brightness="0.03" zoom="1.0" />
-    <range>
-      <maxstress value="0.1" units="Pa" />
-      <maxvelocity value="0.1" units="m/s" />
-    </range>
-  </visualisation>
   <properties>
     <propertyoutput file="flow_snapshot.dat" period="1000">
       <geometry type="whole" />

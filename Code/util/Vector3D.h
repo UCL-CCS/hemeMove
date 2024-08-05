@@ -13,7 +13,7 @@
 #include <algorithm>
 #include <numeric>
 #include <limits>
-#include "util/utilityFunctions.h"
+#include "util/numerical.h"
 
 #ifdef HEMELB_CODE
 #include "net/MpiDataType.h"
@@ -506,7 +506,7 @@ namespace hemelb::util
         {
             bool ans = true;
             for (int i = 0; i < 3; ++i) {
-                ans &= NumericalFunctions::IsInRange(m_values[i], vMin.m_values[i], vMax.m_values[i]);
+                ans &= util::IsInRange(m_values[i], vMin.m_values[i], vMax.m_values[i]);
             }
             return ans;
         }

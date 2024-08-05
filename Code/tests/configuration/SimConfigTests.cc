@@ -12,10 +12,8 @@
 #include "tests/helpers/FolderTestFixture.h"
 #include "tests/helpers/LaddFail.h"
 
-namespace hemelb
+namespace hemelb::tests
 {
-  namespace tests
-  {
     using namespace configuration;
     namespace
     {
@@ -27,7 +25,7 @@ namespace hemelb
 	  return false;
 	}
 	bool operator()(const EquilibriumIC& eqIC) const {
-	  return 80.0 == eqIC.p_mmHg;
+	  return 80.0 == eqIC.p_Pa;
 	}
       };
     }
@@ -37,16 +35,16 @@ namespace hemelb
 	LADD_FAIL();
 	// smoke test the configuration as having loaded OK
 	auto config = SimConfig::New(resources::Resource("config0_2_0.xml").Path());
-	REQUIRE(3000lu == config->GetTotalTimeSteps());
-	REQUIRE(0.0001 == config->GetTimeStepLength());
-    auto inlet = std::get_if<configuration::CosinePressureIoletConfig>(&config->GetInlets()[0]);
+	REQUIRE(3000lu == config.GetTotalTimeSteps());
+	REQUIRE(0.0001 == config.GetTimeStepLength());
+    auto inlet = std::get_if<configuration::CosinePressureIoletConfig>(&config.GetInlets()[0]);
 	//auto inlet = util::clone_dynamic_cast<lb::iolets::InOutLetCosine>(config->GetInlets()[0]);
 
 	REQUIRE(inlet != nullptr);
 	REQUIRE(Approx(0.6) == inlet->period_s);
 
 	// Check that in the absence of the <monitoring> XML element things get initiliased properly
-	auto& monConfig = config->GetMonitoringConfiguration();
+	auto& monConfig = config.GetMonitoringConfiguration();
 	REQUIRE(!monConfig.doConvergenceCheck);
 	REQUIRE(!monConfig.doIncompressibilityCheck);
 	REQUIRE(!monConfig.convergenceTerminate);
@@ -56,14 +54,14 @@ namespace hemelb
       SECTION("0_2_1_Read") {
 	LADD_FAIL();
 	// smoke test the configuration as having loaded OK
-	auto config = std::unique_ptr<SimConfig>(SimConfig::New(resources::Resource("config.xml").Path()));
-	REQUIRE(3000lu == config->GetTotalTimeSteps());
-	REQUIRE(0.0001 == config->GetTimeStepLength());
-	auto inlet = std::get_if<configuration::CosinePressureIoletConfig>(&config->GetInlets()[0]);
+	auto config = SimConfig::New(resources::Resource("config.xml").Path());
+	REQUIRE(3000lu == config.GetTotalTimeSteps());
+	REQUIRE(0.0001 == config.GetTimeStepLength());
+	auto inlet = std::get_if<configuration::CosinePressureIoletConfig>(&config.GetInlets()[0]);
 	REQUIRE(inlet != nullptr);
 	REQUIRE(Approx(0.6) == inlet->period_s);
 
-	auto& monConfig = config->GetMonitoringConfiguration();
+	auto& monConfig = config.GetMonitoringConfiguration();
 	REQUIRE(monConfig.doConvergenceCheck);
 	REQUIRE(monConfig.doIncompressibilityCheck);
 	REQUIRE(monConfig.convergenceTerminate);
@@ -76,12 +74,11 @@ namespace hemelb
 	LADD_FAIL();
 	//Round trip the config twice.
 	CopyResourceToTempdir("config.xml");
-	auto config = std::unique_ptr<SimConfig>(SimConfig::New("config.xml"));
+	auto config = SimConfig::New("config.xml");
 
-	auto& ICconfig = config->GetInitialCondition();
+	auto& ICconfig = config.GetInitialCondition();
 	REQUIRE(std::visit(CfgChecker{}, ICconfig));
       }
 
     }
-  }
 }

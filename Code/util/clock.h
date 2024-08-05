@@ -3,17 +3,12 @@
 // file AUTHORS. This software is provided under the terms of the
 // license in the file LICENSE.
 
-#include "net/mpi.h"
-namespace hemelb
+#ifndef HEMELB_UTIL_CLOCK_H
+#define HEMELB_UTIL_CLOCK_H
+
+namespace hemelb::util
 {
-  namespace util
-  {
-    // Returns the number of seconds to 6dp elapsed since the Epoch
-    double myClock()
-    {
-      return MPI_Wtime();
-    }
-
-  }
-
+    // Return a monotonic time in seconds from an arbitrary time point in the past
+    double clock();
 }
+#endif

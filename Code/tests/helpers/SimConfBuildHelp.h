@@ -12,12 +12,6 @@
 
 namespace hemelb::tests {
 
-    class UninitSimConfig : public configuration::SimConfig {
-    public:
-        inline explicit UninitSimConfig(const std::string &path) : configuration::SimConfig(path) {
-        }
-    };
-
     class UninitSimBuilder : public configuration::SimBuilder {
     public:
         inline UninitSimBuilder(configuration::SimConfig const &conf, std::shared_ptr<util::UnitConverter> conv)

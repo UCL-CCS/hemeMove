@@ -44,7 +44,7 @@ namespace hemelb::tests
 	return Approx(x).margin(1e-9);
       };
 
-      auto timings = std::make_unique<hemelb::reporting::Timers>(Comms());
+      auto timings = std::make_unique<hemelb::reporting::Timers>();
       auto net = std::make_unique<net::Net>(Comms());
 
       auto AdvanceActorOneTimeStep = [&](net::IteratedAction& actor) {

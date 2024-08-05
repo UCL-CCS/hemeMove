@@ -157,7 +157,7 @@ namespace hemelb
         REQUIRE(cells.size() == 2);
         auto first = *cells.begin();
         auto second = *std::next(cells.begin());
-        if (first->GetBarycenter().GetMagnitude() > second->GetBarycenter().GetMagnitude())
+        if (first->GetBarycentre().GetMagnitude() > second->GetBarycentre().GetMagnitude())
           std::swap(first, second);
 
         DivideConquerCells dnc(cells, cutoff, halo);
@@ -210,7 +210,7 @@ namespace hemelb
         // Figures out which cell is which
         auto firstCell = *cells.begin();
         auto secondCell = *std::next(cells.begin());
-        if (firstCell->GetBarycenter().GetMagnitude() > secondCell->GetBarycenter().GetMagnitude())
+        if (firstCell->GetBarycentre().GetMagnitude() > secondCell->GetBarycentre().GetMagnitude())
         {
           std::swap(firstCell, secondCell);
         }

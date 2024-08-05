@@ -43,7 +43,7 @@ namespace hemelb
             lb::InitParams initParams;
             site_t numSites;
             lb::LbmParameters lbmParams;
-            std::unique_ptr<configuration::SimConfig> simConfig;
+            configuration::SimConfig simConfig;
             std::unique_ptr<configuration::SimBuilder> simBuilder;
             std::shared_ptr<lb::SimulationState> simState;
             std::shared_ptr<const util::UnitConverter> unitConverter;

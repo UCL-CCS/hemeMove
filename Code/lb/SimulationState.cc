@@ -3,17 +3,13 @@
 // file AUTHORS. This software is provided under the terms of the
 // license in the file LICENSE.
 
-#include "constants.h"
 #include "lb/SimulationState.h"
-#include "lb/LbmParameters.h"
 
-namespace hemelb
+namespace hemelb::lb
 {
-  namespace lb
-  {
 
-    SimulationState::SimulationState(double timeStepLength, unsigned long totalTimeSteps) :
-        timeStepLength(timeStepLength), timeStep(1), totalTimeSteps(totalTimeSteps),
+    SimulationState::SimulationState(double timeStepLength, unsigned long endTS) :
+        timeStepLength(timeStepLength), endTimeStep(endTS),
             isTerminating(false), stability(Stable)
     {
     }
@@ -25,7 +21,7 @@ namespace hemelb
 
     void SimulationState::Reset()
     {
-      timeStep = 1;
+      timeStep = startTimeStep;
     }
 
     void SimulationState::SetIsTerminating(bool value)
@@ -36,21 +32,6 @@ namespace hemelb
     void SimulationState::SetStability(Stability value)
     {
       stability = value;
-    }
-
-    unsigned long SimulationState::GetTimeStep() const
-    {
-      return timeStep;
-    }
-
-    unsigned long SimulationState::Get0IndexedTimeStep() const
-    {
-      return timeStep - 1;
-    }
-
-    unsigned long SimulationState::GetTotalTimeSteps() const
-    {
-      return totalTimeSteps;
     }
 
     bool SimulationState::IsTerminating() const
@@ -65,8 +46,8 @@ namespace hemelb
     void SimulationState::Report(reporting::Dict& dictionary)
     {
       dictionary.SetFormattedValue("TIME_STEP_LENGTH", "%lf", GetTimeStepLength());
-      dictionary.SetIntValue("STEPS", GetTimeStep() - 1);
-      dictionary.SetIntValue("TOTAL_TIME_STEPS", GetTotalTimeSteps());
+      dictionary.SetIntValue("STEPS", GetTimeStepsElapsed());
+      dictionary.SetIntValue("TOTAL_TIME_STEPS", endTimeStep - startTimeStep);
 
       switch (stability)
       {
@@ -80,5 +61,4 @@ namespace hemelb
           break;
       }
     }
-  }
 }

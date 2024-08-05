@@ -1,26 +1,25 @@
 <?xml version="1.0" ?>
-<hemelbsettings version="5">
+<hemelbsettings version="6">
   <simulation>
     <steps value="10" units="lattice" />
     <step_length value="0.0857" units="s" />
     <voxel_size value="0.01" units="m" />
     <origin value="(0.0,0.0,0.0)" units="m" />
     <fluid_density value="1000.0" units="kg/m3" />
-    <stresstype value="1" />
   </simulation>
   <geometry>
     <datafile path="./four_cube.gmy" />
   </geometry>
   <initialconditions>
     <pressure>
-      <uniform value="80.0" units="mmHg"/>
+      <uniform value="80.0" units="Pa"/>
     </pressure>
   </initialconditions>  
   <inlets>
     <inlet>
       <condition type="pressure" subtype="cosine">
-        <amplitude value="0.0" units="mmHg" />
-        <mean value="80.1" units="mmHg" />
+        <amplitude value="0.0" units="Pa" />
+        <mean value="80.1" units="Pa" />
         <phase value="0.0" units="rad" />
         <period value="0.6" units="s" />
       </condition>
@@ -31,8 +30,8 @@
   <outlets>
     <outlet>
       <condition type="pressure" subtype="cosine">
-        <amplitude value="0.0" units="mmHg" />
-        <mean value="80.0" units="mmHg" />
+        <amplitude value="0.0" units="Pa" />
+        <mean value="80.0" units="Pa" />
         <phase value="0.0" units="rad" />
         <period value="0.6" units="s" />
       </condition>
@@ -40,18 +39,6 @@
       <position value="(0.0,0.0,0.05)" units="m" />
     </outlet>
   </outlets>
-  <visualisation>
-    <centre value="(0.0,0.0,0.0)" units="m" />
-    <orientation>
-      <latitude value="45.0" units="deg" />
-      <longitude value="45.0" units="deg" />
-    </orientation>
-    <display brightness="0.03" zoom="1.0" />
-    <range>
-      <maxstress value="0.1" units="Pa" />
-      <maxvelocity value="0.1" units="m/s" />
-    </range>
-  </visualisation>
   <properties>
     <propertyoutput period="2" file="wholegeometryvelocityandstress.dat">
       <geometry type="whole" />

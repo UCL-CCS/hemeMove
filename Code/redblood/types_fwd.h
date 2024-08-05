@@ -12,10 +12,8 @@
 #include <set>
 #include <string>
 
-namespace hemelb
+namespace hemelb::redblood
 {
-  namespace redblood
-  {
     class CellBase;
 
     namespace details
@@ -36,7 +34,6 @@ namespace hemelb
     using CellInserter = std::function<void(CellContainer::value_type)>;
     //! Type of callback for listening to changes to cells
     using CellChangeListener = std::function<void (const CellContainer &)>;
-  }
-} // namespace hemelb::redblood
+}
 #endif
 

@@ -135,7 +135,7 @@ namespace hemelb::tests
 							    unsigned int depth) const
     {
       auto cell = std::make_shared<Cell>(icoSphere(depth));
-      *cell += pos - cell->GetBarycenter();
+      *cell += pos - cell->GetBarycentre();
       *cell *= scale;
       cell->SetScale(scale);
       cell->SetTag(uuid);
@@ -212,9 +212,9 @@ namespace hemelb::tests
       auto const ranks = graph ?
 	graph.RankMap(net::MpiCommunicator::World()) :
 	net::MpiCommunicator::World().RankMap(net::MpiCommunicator::World());
-      auto const barycenter = cell->GetBarycenter();
+      auto const barycentre = cell->GetBarycentre();
       for (int i = 0; i < net::MpiCommunicator::World().Size(); ++i) {
-	auto const d = (GetCenter(ranks.find(i)->second) - barycenter).GetMagnitudeSquared();
+	auto const d = (GetCenter(ranks.find(i)->second) - barycentre).GetMagnitudeSquared();
 	distances.push_back(d);
       };
       return std::min_element(distances.begin(), distances.end()) - distances.begin();
@@ -522,7 +522,7 @@ namespace hemelb::tests
       for (size_t i(0); i < sendto.size(); ++i)
         {
           cells.push_back(templateCell->clone());
-          *cells[i] += GetCenter(sendto[i]) - cells[i]->GetBarycenter();
+          *cells[i] += GetCenter(sendto[i]) - cells[i]->GetBarycentre();
           boost::uuids::uuid tag;
           std::fill(tag.begin(), tag.end(), static_cast<unsigned char>(i));
           cells[i]->SetTag(tag);
@@ -585,8 +585,8 @@ namespace hemelb::tests
       for (size_t i(0); i < sendto.size(); ++i)
         {
           cells.push_back(templateCell->clone());
-          // one barycenter on each side of the ownership line
-          *cells[i] += (GetCenter(0) + GetCenter(1)) * 0.5 - cells[i]->GetBarycenter();
+          // one barycentre on each side of the ownership line
+          *cells[i] += (GetCenter(0) + GetCenter(1)) * 0.5 - cells[i]->GetBarycentre();
           *cells[i] += (GetCenter(0) - GetCenter(1)).GetNormalised() * (i != 0 ?
 									0.1 :
 									-0.1);
@@ -658,7 +658,7 @@ namespace hemelb::tests
 	boost::uuids::uuid tag;
 	std::fill(tag.begin(), tag.end(), static_cast<unsigned char>(u));
 	result->SetTag(tag);
-	*result += centerOnLine(i, j, alpha) - result->GetBarycenter();
+	*result += centerOnLine(i, j, alpha) - result->GetBarycentre();
 	return CellContainer::value_type(std::move(result));
       };
       std::vector<CellContainer::value_type> const cells {

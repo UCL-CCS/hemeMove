@@ -81,12 +81,12 @@ namespace hemelb
 	}
       }
 
-      SECTION("testBarycenter") {
+      SECTION("testBarycentre") {
 	LatticePosition a(0.1, 0.1, 0.1), b(1, 0, 0), c(0, 1, 0), d(0, 0, 1);
 	LatticePosition const expected = (a + b + c + d) * 0.25;
-	REQUIRE(std::abs(barycenter(mesh)[0] - expected[0]) < 1e-8);
-	REQUIRE(std::abs(barycenter(mesh)[1] - expected[1]) < 1e-8);
-	REQUIRE(std::abs(barycenter(mesh)[2] - expected[2]) < 1e-8);
+	REQUIRE(std::abs(barycentre(mesh)[0] - expected[0]) < 1e-8);
+	REQUIRE(std::abs(barycentre(mesh)[1] - expected[1]) < 1e-8);
+	REQUIRE(std::abs(barycentre(mesh)[2] - expected[2]) < 1e-8);
       }
 
       SECTION("testScaling") {
@@ -95,11 +95,11 @@ namespace hemelb
 	Mesh scaled(mesh);
 	scaled *= scale;
 
-	REQUIRE(ApproxV(original.GetBarycenter()) == scaled.GetBarycenter());
+	REQUIRE(ApproxV(original.GetBarycentre()) == scaled.GetBarycentre());
 	LatticePosition const first = (*original.GetVertices().begin()
-				       - original.GetBarycenter()) * scale + original.GetBarycenter();
+				       - original.GetBarycentre()) * scale + original.GetBarycentre();
 	LatticePosition const second = (* (++original.GetVertices().begin())
-					- original.GetBarycenter()) * scale + original.GetBarycenter();
+					- original.GetBarycentre()) * scale + original.GetBarycentre();
 	REQUIRE(ApproxV(first) == *scaled.GetVertices().begin());
 	REQUIRE(ApproxV(second) ==  *(++scaled.GetVertices().begin()));
       }
@@ -110,8 +110,8 @@ namespace hemelb
 	Mesh trans(mesh);
 	trans += offset;
 
-	REQUIRE(ApproxV(original.GetBarycenter() + offset) ==
-		trans.GetBarycenter());
+	REQUIRE(ApproxV(original.GetBarycentre() + offset) ==
+		trans.GetBarycentre());
 	LatticePosition const first = *original.GetVertices().begin() + offset;
 	LatticePosition const second = * (++original.GetVertices().begin()) + offset;
 	REQUIRE(ApproxV(first) == *trans.GetVertices().begin());

@@ -21,15 +21,15 @@ namespace hemelb::io
   class XdrMemReader : public XdrReader
   {
   public:
-    XdrMemReader(const char* dataBuffer, unsigned int dataLength);
-    XdrMemReader(const std::vector<char>& dataVec);
+    XdrMemReader(const std::byte* dataBuffer, unsigned int dataLength);
+    XdrMemReader(const std::vector<std::byte>& dataVec);
     ~XdrMemReader() override = default;
     unsigned GetPosition() override;
   protected:
-    const char* get_bytes(size_t n) override;
+    const std::byte* get_bytes(size_t n) override;
   private:
-    const char* start;
-    const char* current;
+    const std::byte* start;
+    const std::byte* current;
     size_t len;
   };
 }

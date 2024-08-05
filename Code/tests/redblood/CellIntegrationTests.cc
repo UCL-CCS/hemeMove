@@ -4,13 +4,13 @@
 // license in the file LICENSE.
 
 #include <catch2/catch.hpp>
-#include <tinyxml.h>
+#include <tinyxml2.h>
 
 #include "Traits.h"
-#include "SimulationMaster.h"
+#include "SimulationController.h"
+#include "configuration/SimBuilder.h"
 #include "redblood/Cell.h"
 #include "redblood/CellController.h"
-#include "tests/redblood/Fixtures.h"
 #include "tests/helpers/LatticeDataAccess.h"
 #include "tests/helpers/FolderTestFixture.h"
 
@@ -21,36 +21,36 @@ namespace hemelb::tests
     {
       using MyTraits = Traits<lb::DefaultLattice, lb::GuoForcingLBGK>;
       using CellControll = CellController<MyTraits>;
-      using MasterSim = SimulationMaster<MyTraits>;
 
     public:
-      CellIntegrationTests() : FolderTestFixture(), timings(Comms()) {
+      CellIntegrationTests() : FolderTestFixture(), timings() {
 	CopyResourceToTempdir("red_blood_cell.txt");
-	TiXmlDocument doc(resources::Resource("large_cylinder.xml").Path());
+	tinyxml2::XMLDocument doc;
+    doc.LoadFile(resources::Resource("large_cylinder.xml").Path().c_str());
 	CopyResourceToTempdir("large_cylinder.xml");
     ModifyXMLInput("large_cylinder.xml", {"simulation", "steps", "value"}, 8);
 	CopyResourceToTempdir("large_cylinder.gmy");
-	options = std::make_shared<hemelb::configuration::CommandLine>(argc, argv);
+	options = std::make_unique<configuration::CommandLine>(argc, argv);
 
 	auto cell = std::make_shared<Cell>(icoSphere(4));
-	templates = std::make_shared<TemplateCellContainer>();
+	templates = std::make_unique<TemplateCellContainer>();
 	(*templates)["icosphere"] = cell;
 	cell->moduli = Cell::Moduli(1e-6, 1e-6, 1e-6, 1e-6);
 	cells.insert(cell);
 
 	//timings = std::make_unique<reporting::Timers>(Comms());
-	master = std::make_shared<MasterSim>(*options, Comms());
-	helpers::LatticeDataAccess(&master->GetFieldData()).ZeroOutForces();
+	simController = configuration::SimBuilder::CreateSim<MyTraits>(*options, Comms());
+	helpers::LatticeDataAccess(&simController->GetFieldData()).ZeroOutForces();
       }
 
       ~CellIntegrationTests() {
-	master->Finalise();
+	simController->Finalise();
       }
 
       // No errors when interpolation/spreading hits nodes out of bounds
       void testCellOutOfBounds()
       {
-          auto& fd = master->GetFieldData();
+          auto& fd = simController->GetFieldData();
           auto& dom = fd.GetDomain();
 	(*cells.begin())->operator+=(dom.GetGlobalSiteMins() * 2.0);
 	auto controller = std::make_shared<CellControll>(
@@ -59,8 +59,8 @@ namespace hemelb::tests
 							 templates,
 							 timings
 							 );
-	master->RegisterActor(*controller, 1);
-	master->RunSimulation();
+	simController->RegisterActor(*controller, 1);
+	simController->RunSimulation();
 	AssertPresent("results/report.txt");
 	AssertPresent("results/report.xml");
       }
@@ -69,25 +69,25 @@ namespace hemelb::tests
       void testIntegration()
       {
 	// setup cell position
-	auto& fieldData = master->GetFieldData();
+	auto& fieldData = simController->GetFieldData();
     auto& dom = fieldData.GetDomain();
 	auto const mid = LatticePosition(dom.GetGlobalSiteMaxes()
                                      + dom.GetGlobalSiteMins()) * 0.5;
-	(**cells.begin()) += mid - (*cells.begin())->GetBarycenter();
+	(**cells.begin()) += mid - (*cells.begin())->GetBarycentre();
 	(**cells.begin()) += LatticePosition(0, 0, 8 - mid.z());
 	(**cells.begin()) *= 5.0;
 	auto controller = std::make_shared<CellControll>(fieldData, cells, templates, timings);
-	auto const barycenter = (*cells.begin())->GetBarycenter();
+	auto const barycentre = (*cells.begin())->GetBarycentre();
 
 	// run
-	master->RegisterActor(*controller, 1);
-	master->RunSimulation();
+	simController->RegisterActor(*controller, 1);
+	simController->RunSimulation();
 
 	// check position of cell has changed
-	auto const moved = (*cells.begin())->GetBarycenter();
-	REQUIRE(Approx(barycenter.x()).margin(1e-12) == moved.x());
-	REQUIRE(Approx(barycenter.y()).margin(1e-12) == moved.y());
-	REQUIRE(std::abs(barycenter.z() - moved.z()) > 1e-8);
+	auto const moved = (*cells.begin())->GetBarycentre();
+	REQUIRE(Approx(barycentre.x()).margin(1e-12) == moved.x());
+	REQUIRE(Approx(barycentre.y()).margin(1e-12) == moved.y());
+	REQUIRE(std::abs(barycentre.z() - moved.z()) > 1e-8);
 
 	// Check there is force on one of the lattice site near a
 	// node node position is guessed at from geometry. This
@@ -107,20 +107,20 @@ namespace hemelb::tests
 	CellContainer empty;
 	auto empty_tmpl = std::make_shared<TemplateCellContainer>();
 	auto controller = std::make_shared<CellControll>(
-							 master->GetFieldData(),
-							 empty, empty_tmpl, timings);
+            simController->GetFieldData(),
+            empty, empty_tmpl, timings);
 
 	// run
-	master->RegisterActor(*controller, 1);
-	master->RunSimulation();
+	simController->RegisterActor(*controller, 1);
+	simController->RunSimulation();
 
 	AssertPresent("results/report.txt");
 	AssertPresent("results/report.xml");
       }
 
     private:
-      std::shared_ptr<MasterSim> master;
-      std::shared_ptr<configuration::CommandLine> options;
+      std::unique_ptr<SimulationController> simController;
+      std::unique_ptr<configuration::CommandLine> options;
       CellContainer cells;
       std::shared_ptr<TemplateCellContainer> templates;
       reporting::Timers timings;

@@ -51,18 +51,67 @@ namespace hemelb::net
         }
 
         // Size should be the number of participating processes from the collective.
-        std::size_t size() const {
+        [[nodiscard]] std::size_t size() const {
             return displacements.size() - 1;
         }
 
         // Return a span over the data belonging to the given process.
-        std::span<T> operator[](std::size_t i) {
+        [[nodiscard]] std::span<T> operator[](std::size_t i) {
             HASSERT(i >= 0 && i < displacements.size());
             auto start = displacements[i];
             auto count = displacements[i+1] - start;
             return std::span<T>{data.data() + start, unsigned(count)};
         }
+        [[nodiscard]] std::span<T const> operator[](std::size_t i) const {
+            HASSERT(i >= 0 && i < displacements.size());
+            auto start = displacements[i];
+            auto count = displacements[i+1] - start;
+            return std::span<T const>{data.data() + start, unsigned(count)};
+        }
     };
+
+    // Wrap an MPI_Request
+    //
+    // All inline for performance.
+    //
+    // This class owns the request and must ensure that it is
+    // finished. Hence it can't be copied, but can be moved.
+    // Its destructor will check for null in debug mode.
+    class MpiRequest {
+        MPI_Request req = MPI_REQUEST_NULL;
+        friend class MpiCommunicator;
+
+    public:
+        MpiRequest() = default;
+
+        // Copy not allowed
+        MpiRequest(MpiRequest const&) = delete;
+        MpiRequest& operator=(MpiRequest const&) = delete;
+        // Move construct is obvious
+        MpiRequest(MpiRequest&&) = default;
+        // Move assign has to check the destination object is null
+        inline MpiRequest& operator=(MpiRequest&& other) {
+            HASSERT(req == MPI_REQUEST_NULL);
+            std::swap(req, other.req);
+            return *this;
+        }
+        // Destructor checks null
+        inline ~MpiRequest() {
+            HASSERT(req == MPI_REQUEST_NULL);
+        }
+
+        inline void Wait() {
+            HEMELB_MPI_CALL(MPI_Wait, (&req, MPI_STATUS_IGNORE));
+        }
+        static void Waitall(std::span<MpiRequest> reqs);
+
+        [[nodiscard]] inline bool Test() {
+            int done = 0;
+            HEMELB_MPI_CALL(MPI_Test, (&req, &done, MPI_STATUS_IGNORE));
+            return done;
+        }
+    };
+
 
     // Holds an MPI communicator and exposes communication functions
     // via members. It will own the underlying MPI_Comm (i.e. it will
@@ -72,7 +121,7 @@ namespace hemelb::net
     // increments the reference count.
     class MpiCommunicator
     {
-      public:
+    public:
         static MpiCommunicator World();
 
         /**
@@ -86,7 +135,7 @@ namespace hemelb::net
          * Returns the local rank on the communicator
          * @return
          */
-        inline int Rank() const
+        [[nodiscard]] inline int Rank() const
         {
           HASSERT(localRankInCommunicator >= 0);
           return localRankInCommunicator;
@@ -96,7 +145,7 @@ namespace hemelb::net
          * Returns the size of the communicator (i.e. total number of procs involved).
          * @return
          */
-        inline int Size() const
+        [[nodiscard]] inline int Size() const
         {
           HASSERT(communicatorSize > 0);
           return communicatorSize;
@@ -107,7 +156,7 @@ namespace hemelb::net
          * @param Group which is a subset of the group of this communicator.
          * @return New communicator.
          */
-        MpiCommunicator Create(const MpiGroup& grp) const;
+        [[nodiscard]] MpiCommunicator Create(const MpiGroup& grp) const;
 
         /**
          * Allow implicit casts to MPI_Comm
@@ -128,7 +177,7 @@ namespace hemelb::net
          * Returns the MPI group being used.
          * @return
          */
-        MpiGroup Group() const;
+        [[nodiscard]] MpiGroup Group() const;
 
         /**
          * Abort - should try to bring down all tasks, but no guarantees
@@ -140,7 +189,7 @@ namespace hemelb::net
          * Duplicate the communicator - see MPI_COMM_DUP
          * @return
          */
-        MpiCommunicator Duplicate() const;
+        [[nodiscard]] MpiCommunicator Duplicate() const;
 
         // Broadcast overloads - all are collective as use MPI_Bcast
         //
@@ -152,7 +201,7 @@ namespace hemelb::net
         template<typename T, std::size_t N>
         void Broadcast(std::span<T, N> vals, int root) const;
         // Special case for string that does length then data.
-        void Broadcast(std::string& val, const int root) const;
+        void Broadcast(std::string& val, int root) const;
 
         template<typename T>
         T AllReduce(const T& val, const MPI_Op& op) const;
@@ -161,33 +210,44 @@ namespace hemelb::net
         template<typename T>
         std::vector<T> AllReduce(const std::vector<T>& vals, const MPI_Op& op) const;
 
-	template <typename T>
-	T Scan(const T& val, const MPI_Op& op) const;
+        // Compute the inclusive scan (i.e. partial sum).
+        // T must be default constructible.
+        // Only for scalars at the moment.
+        template <typename T>
+        [[nodiscard]] T Scan(const T& val, const MPI_Op& op) const;
+
+        // Compute the exclusive scan (i.e. partial sum) in a non-blocking fashion.
+        // T must be default constructible and value is undefined on rank 0.
+        // Only for scalars at the moment.
+        template <typename T>
+        [[nodiscard]] MpiRequest Iexscan(const T& val, T& dest, const MPI_Op& op) const;
 
         template<typename T>
-        T Reduce(const T& val, const MPI_Op& op, const int root) const;
+        T Reduce(const T& val, const MPI_Op& op, int root) const;
         template<typename T>
-        std::vector<T> Reduce(const std::vector<T>& vals, const MPI_Op& op, const int root) const;
+        std::vector<T> Reduce(const std::vector<T>& vals, const MPI_Op& op, int root) const;
+        template<typename T, std::size_t N = std::dynamic_extent>
+        void Reduce(std::span<T, N> dest, std::span<const T, N> vals, const MPI_Op& op, int root) const;
 
         template<typename T>
-        std::vector<T> Gather(const T& val, const int root) const;
+        std::vector<T> Gather(const T& val, int root) const;
 
         //! \brief Specialization for a vector of variable size
         //! \note Two collective MPI operations are made here, first to get the sizes, then to get
         //! the values.
         template<typename T>
-        std::vector<T> Gather(const std::vector<T>& val, const int root) const;
+        std::vector<T> Gather(const std::vector<T>& val, int root) const;
 
         template <typename T>
-        T Scatter(const std::vector<T>& vals, const int root) const;
+        T Scatter(const std::vector<T>& vals, int root) const;
         template <typename T>
-        std::vector<T> Scatter(const std::vector<T>& vals, const size_t n, const int root) const;
+        std::vector<T> Scatter(const std::vector<T>& vals, size_t n, const int root) const;
 
         template <typename T>
         std::vector<T> AllGather(const T& val) const;
 
         template <typename T>
-        displaced_data<T> AllGatherV(const std::vector<T>& vals) const;
+        [[nodiscard]] displaced_data<T> AllGatherV(const std::vector<T>& vals) const;
 
         /**
          * Performs an all gather operation of fixed size among the neighbours defined in a MPI graph communicator
@@ -213,28 +273,38 @@ namespace hemelb::net
         template<typename T>
         void Send(const std::vector<T>& val, int dest, int tag = 0) const;
 
+        template <typename T>
+        [[nodiscard]] MpiRequest Issend(std::span<T const> vals, int dest, int tag = 0) const;
+        template <typename T>
+        [[nodiscard]] MpiRequest Issend(T const& val, int dest, int tag = 0) const;
+
         template<typename T>
         void Receive(T& val, int src, int tag = 0, MPI_Status* stat = MPI_STATUS_IGNORE) const;
         template<typename T>
         void Receive(std::vector<T>& val, int src, int tag = 0,
                      MPI_Status* stat = MPI_STATUS_IGNORE) const;
 
+        template <typename T>
+        [[nodiscard]] MpiRequest Irecv(std::span<T> dest, int src, int tag = 0) const;
+        template <typename T>
+        [[nodiscard]] MpiRequest Irecv(T& dest, int src, int tag = 0) const;
+
         //! \brief Create a distributed graph communicator assuming unweighted and bidirectional communication.
-        MpiCommunicator DistGraphAdjacent(std::vector<int> my_neighbours, bool reorder = true) const;
+        [[nodiscard]] MpiCommunicator DistGraphAdjacent(std::vector<int> my_neighbours, bool reorder = true) const;
 
         //! \brief Returns graph neighborhood for calling process
         //! \details This communicator must have been created with graph
-        std::vector<int> GetNeighbors() const;
+        [[nodiscard]] std::vector<int> GetNeighbors() const;
         //! \brief Number of neighbors for calling process in a graph communicator
-        int GetNeighborsCount() const;
+        [[nodiscard]] int GetNeighborsCount() const;
 
         //! A map from the ranks of this communicator to another
-        std::map<int, int> RankMap(MpiCommunicator const &valueComm) const;
+        [[nodiscard]] std::map<int, int> RankMap(MpiCommunicator const &valueComm) const;
 
         //! Splits a communicator
-        MpiCommunicator Split(int color, int rank) const;
+        [[nodiscard]] MpiCommunicator Split(int color, int rank) const;
         //! Splits a communicator
-        MpiCommunicator Split(int color) const
+        [[nodiscard]] MpiCommunicator Split(int color) const
         {
           return Split(color, Rank());
         }
@@ -242,6 +312,7 @@ namespace hemelb::net
         MpiCommunicator SplitType(int type = MPI_COMM_TYPE_SHARED) const;
 
         void Barrier() const;
+        [[nodiscard]] MpiRequest Ibarrier() const;
 
       protected:
         /**

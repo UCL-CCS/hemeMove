@@ -10,7 +10,7 @@ import numpy as np
 from . import HemeLbMagicNumber
 
 ExtractionMagicNumber = 0x78747204
-MainHeaderLength = 60
+MagicVersionLength = 12
 TimeStepDataLength = 8
 
 
@@ -26,18 +26,20 @@ class FieldSpec:
          XDR data type,
          in-memory dtype,
          number of elements,
-         offset from start of a "row")
+         offset from start of a "row",
+         data offset,
+         lattice->physical scale factor)
 
     """
 
     def __init__(self, memspec):
         # name, XDR dtype, in-memory dtype, length, offset
-        self._filespec = [("grid", ">i4", np.uint32, (3,), 0)]
+        self._filespec = [("grid", ">i4", np.uint32, (3,), 0, None, None)]
 
         self._memspec = memspec
         return
 
-    def Append(self, name, length, xdrType, memType):
+    def Append(self, name, length, xdrType, memType, d_off, scale):
         """Add a new field to the specification."""
         if length == 1:
             np_len = ()
@@ -45,7 +47,7 @@ class FieldSpec:
             np_len = (length,)
 
         offset = self.GetRecordLength()
-        self._filespec.append((name, xdrType, memType, np_len, offset))
+        self._filespec.append((name, xdrType, memType, np_len, offset, d_off, scale))
         return
 
     def GetMem(self):
@@ -53,7 +55,7 @@ class FieldSpec:
         return np.dtype(
             [
                 (name, memType, length)
-                for name, xdrType, memType, length, offset in (
+                for name, xdrType, memType, length, offset, d_off, scale in (
                     self._memspec + self._filespec
                 )
             ]
@@ -64,7 +66,7 @@ class FieldSpec:
         return np.dtype(
             [
                 (name, xdrType, length)
-                for name, xdrType, memType, length, offset in self._filespec
+                for name, xdrType, memType, length, offset, d_off, scale in self._filespec
             ]
         )
 
@@ -79,32 +81,158 @@ class FieldSpec:
     pass
 
 
-class ExtractedPropertyV4Parser:
-    def __init__(self, fieldCount, siteCount):
-        self._fieldCount = fieldCount
-        self._siteCount = siteCount
+class xtr_parser_base:
+    def __init__(self, physical_units=True):
+        if not physical_units:
+            assert self.VERSION >= 6
+        self.OutputPhysicalUnits = physical_units
+        self.FieldHeaderStart = MagicVersionLength + self.MainHeaderLength
 
-    def parse(self, memoryMappedData):
-        result = np.recarray(self._siteCount, dtype=self._fieldSpec.GetMem())
+    def _load_field_header(self, xtr_file):
+        xtr_file.seek(self.FieldHeaderStart)
+        fieldHeader = xtr_file.read(self.FieldHeaderLength)
+        assert (
+            len(fieldHeader) == self.FieldHeaderLength
+        ), "Did not read the correct length of the field header in extraction file '{}'".format(
+            xtr_file.name
+        )
 
-        for ((name, xdrType, memType, length, offset), dataOffset) in zip(
-            self._fieldSpec, self._dataOffset
-        ):
+        return xdrlib.Unpacker(fieldHeader)
+
+
+class xtr_common_4_5:
+    """Same main header for V4 & V5"""
+
+    MainHeaderLength = 48
+
+    def ParseMainHeader(self, xtr_file, xtr):
+        # Read the correct number of bytes
+        mainHeader = xtr_file.read(self.MainHeaderLength)
+        assert (
+            len(mainHeader) == self.MainHeaderLength
+        ), "Did not read the correct length of the main header in extraction file '{}'".format(
+            xtr_file.name
+        )
+
+        decoder = xdrlib.Unpacker(mainHeader)
+        xtr.voxelSizeMetres = decoder.unpack_double()
+        xtr.originMetres = np.array([decoder.unpack_double() for i in range(3)])
+
+        self.siteCount = xtr.siteCount = decoder.unpack_uhyper()
+        self.fieldCount = xtr.fieldCount = decoder.unpack_uint()
+        self.FieldHeaderLength = decoder.unpack_uint()
+
+
+class xtr_common_5_6:
+    """Same field headers for V5 & 6"""
+
+    TYPECODE_TYPE = [np.float32, np.float64, np.int32, np.uint32, np.int64, np.uint64]
+    TYPECODE_STR = [">f4", ">f8", ">i4", ">u4", ">i8", ">u8"]
+    UNPACK_TYPE = [
+        lambda up: up.unpack_float,
+        lambda up: up.unpack_double,
+        lambda up: up.unpack_int,
+        lambda up: up.unpack_uint,
+        lambda up: up.unpack_hyper,
+        lambda up: up.unpack_uhyper,
+    ]
+
+    def _parse_scale(self, decoder, tc):
+        return None
+
+    def ParseFieldHeader(self, xtr_file):
+        decoder = self._load_field_header(xtr_file)
+
+        self._fieldSpec = FieldSpec(
+            [
+                ("id", None, np.uint64, (), None, None, None),
+                ("position", None, np.float32, (3,), None, None, None),
+            ]
+        )
+        for iField in range(self.fieldCount):
+            name = decoder.unpack_string().decode("ascii")
+            length = decoder.unpack_uint()
+            tc = decoder.unpack_uint()
+            np_type = self.TYPECODE_TYPE[tc]
+            n_offsets = decoder.unpack_uint()
+            offsets = np.empty(n_offsets, dtype=np_type)
+            for iOff in range(n_offsets):
+                offsets[iOff] = self.UNPACK_TYPE[tc](decoder)()
+
+            if n_offsets == 0:
+                d_off = None
+            elif n_offsets == 1:
+                d_off = offsets[0]
+            elif n_offsets == length:
+                # Above condition will run for scalar fields
+                d_off = offsets[np.newaxis, :]
+            else:
+                raise ValueError(
+                    f"Invalid number of offsets in extraction file for field '{name}'"
+                )
+            scale = self._parse_scale(decoder, tc)
+            self._fieldSpec.Append(
+                name, length, self.TYPECODE_STR[tc], np_type, d_off, scale
+            )
+
+        return self._fieldSpec
+
+    def ParseTimeStep(self, memoryMappedData):
+        result = np.recarray(self.siteCount, dtype=self._fieldSpec.GetMem())
+
+        for (
+            name,
+            xdrType,
+            memType,
+            length,
+            offset,
+            dataOffset,
+            scale,
+        ) in self._fieldSpec:
+            filedata = memoryMappedData.getfield((xdrType, length), offset)
+            memdata = getattr(result, name)
+            memdata[:] = filedata[:]
+            if dataOffset is not None:
+                memdata += dataOffset
+            if scale is not None:
+                memdata *= scale
+        return result
+
+
+class ExtractedPropertyV4Parser(xtr_parser_base, xtr_common_4_5):
+    """Only float32s, output in physical units"""
+
+    VERSION = 4
+
+    def ParseTimeStep(self, memoryMappedData):
+        result = np.recarray(self.siteCount, dtype=self._fieldSpec.GetMem())
+
+        for (
+            name,
+            xdrType,
+            memType,
+            length,
+            offset,
+            dataOffset,
+            scale,
+        ) in self._fieldSpec:
             data = memoryMappedData.getfield((xdrType, length), offset)
             setattr(result, name, self._recursiveAdd(data, dataOffset))
             continue
         return result
 
-    def ParseFieldHeader(self, decoder):
+    def ParseFieldHeader(self, xtr_file):
+        decoder = self._load_field_header(xtr_file)
+
         self._fieldSpec = FieldSpec(
             [
-                ("id", None, np.uint64, (), None),
-                ("position", None, np.float32, (3,), None),
+                ("id", None, np.uint64, (), None, None, None),
+                ("position", None, np.float32, (3,), None, None, None),
             ]
         )
         self._dataOffset = [0]
 
-        for iField in range(self._fieldCount):
+        for iField in range(self.fieldCount):
             name = decoder.unpack_string().decode("ascii")
             length = decoder.unpack_uint()
             self._dataOffset.append(decoder.unpack_double())
@@ -120,77 +248,59 @@ class ExtractedPropertyV4Parser:
         pass
 
 
-class ExtractedPropertyV5Parser:
-    TYPECODE_TYPE = [np.float32, np.float64, np.int32, np.uint32, np.int64, np.uint64]
-    TYPECODE_STR = [">f4", ">f8", ">i4", ">u4", ">i8", ">u8"]
-    UNPACK_TYPE = [
-        lambda up: up.unpack_float,
-        lambda up: up.unpack_double,
-        lambda up: up.unpack_int,
-        lambda up: up.unpack_uint,
-        lambda up: up.unpack_hyper,
-        lambda up: up.unpack_uhyper,
-    ]
+class ExtractedPropertyV5Parser(xtr_parser_base, xtr_common_4_5, xtr_common_5_6):
+    """Variable types in physical units"""
 
-    def __init__(self, fieldCount, siteCount):
-        self._fieldCount = fieldCount
-        self._siteCount = siteCount
+    VERSION = 5
+    pass
 
-    def ParseFieldHeader(self, decoder):
-        self._fieldSpec = FieldSpec(
-            [
-                ("id", None, np.uint64, (), None),
-                ("position", None, np.float32, (3,), None),
-            ]
+
+class ExtractedPropertyV6Parser(xtr_parser_base, xtr_common_5_6):
+    """Variable types in lattice units"""
+
+    VERSION = 6
+
+    MainHeaderLength = 72
+
+    def ParseMainHeader(self, xtr_file, xtr):
+        # Read the correct number of bytes
+        mainHeader = xtr_file.read(self.MainHeaderLength)
+        assert (
+            len(mainHeader) == self.MainHeaderLength
+        ), "Did not read the correct length of the main header in extraction file '{}'".format(
+            xtr_file.name
         )
-        self._dataOffset = [None]
 
-        for iField in range(self._fieldCount):
-            name = decoder.unpack_string().decode("ascii")
-            length = decoder.unpack_uint()
-            tc = decoder.unpack_uint()
-            np_type = self.TYPECODE_TYPE[tc]
-            n_offsets = decoder.unpack_uint()
-            offsets = np.empty(n_offsets, dtype=np_type)
-            for iOff in range(n_offsets):
-                offsets[iOff] = self.UNPACK_TYPE[tc](decoder)()
+        decoder = xdrlib.Unpacker(mainHeader)
+        self.dx = xtr.voxelSizeMetres = decoder.unpack_double()
+        self.dt = xtr.timeStepSeconds = decoder.unpack_double()
+        self.dm = xtr.massScaleKg = decoder.unpack_double()
+        self.origin_m = xtr.originMetres = np.array(
+            [decoder.unpack_double() for i in range(3)]
+        )
+        self.ref_pressure_pa = decoder.unpack_double()
+        self.siteCount = xtr.siteCount = decoder.unpack_uhyper()
+        self.fieldCount = xtr.fieldCount = decoder.unpack_uint()
+        self.FieldHeaderLength = decoder.unpack_uint()
 
-            self._fieldSpec.Append(name, length, self.TYPECODE_STR[tc], np_type)
-            if n_offsets == 0:
-                self._dataOffset.append(None)
-            elif n_offsets == 1:
-                self._dataOffset.append(offsets[0])
-            elif n_offsets == length:
-                # Above condition will run for scalar fields
-                self._dataOffset.append(offsets[np.newaxis, :])
-            else:
-                raise ValueError(
-                    f"Invalid number of offsets in extraction file for field '{name}'"
-                )
-
-        return self._fieldSpec
-
-    def parse(self, memoryMappedData):
-        result = np.recarray(self._siteCount, dtype=self._fieldSpec.GetMem())
-
-        for ((name, xdrType, memType, length, offset), dataOffset) in zip(
-            self._fieldSpec, self._dataOffset
-        ):
-            filedata = memoryMappedData.getfield((xdrType, length), offset)
-            memdata = getattr(result, name)
-            memdata[:] = filedata[:]
-            if dataOffset is not None:
-                memdata += dataOffset
-
-        return result
+    def _parse_scale(self, decoder, tc):
+        scale = self.UNPACK_TYPE[tc](decoder)()
+        if self.OutputPhysicalUnits:
+            return None if scale == 0.0 else scale
+        else:
+            return None
 
 
 class ExtractedProperty:
     """Represent the contents of a HemeLB property extraction file."""
 
-    HandledVersions = {4, 5}
+    VersionHandlers = {
+        4: ExtractedPropertyV4Parser,
+        5: ExtractedPropertyV5Parser,
+        6: ExtractedPropertyV6Parser,
+    }
 
-    def __init__(self, filename):
+    def __init__(self, filename, physical_units=True):
         """Read the file's headers and determine how many times and which times
         have data available.
         """
@@ -198,49 +308,40 @@ class ExtractedProperty:
         self.filename = filename
         self._file = open(filename, "rb")
 
-        self._ReadMainHeader()
-        self._ReadFieldHeader()
-        self._DetermineTimes()
-
-        # At this point, we can close the file. All external access uses memory maps.
-        self._file.close()
-        return
-
-    def _ReadMainHeader(self):
-        """Read data from the main header and store it in attributes."""
-        # Ensure we're at the start
-        self._file.seek(0)
-        # Read the correct number of bytes
-        mainHeader = self._file.read(MainHeaderLength)
+        # Read the magic numbers and version
+        magicEtc = self._file.read(MagicVersionLength)
         assert (
-            len(mainHeader) == MainHeaderLength
-        ), "Did not read the correct length of the main header in extraction file '{}'".format(
+            len(magicEtc) == MagicVersionLength
+        ), "Did not read the correct length of magic numbers in extraction file '{}'".format(
             self.filename
         )
-
-        decoder = xdrlib.Unpacker(mainHeader)
+        decoder = xdrlib.Unpacker(magicEtc)
         assert (
             decoder.unpack_uint() == HemeLbMagicNumber
         ), "Incorrect HemeLB magic number"
         assert (
             decoder.unpack_uint() == ExtractionMagicNumber
         ), "Incorrect extraction magic number"
-        version = decoder.unpack_uint()
-        assert (
-            version in self.HandledVersions
-        ), "Incorrect extraction format version number"
 
-        self.voxelSizeMetres = decoder.unpack_double()
-        self.originMetres = np.array([decoder.unpack_double() for i in range(3)])
+        self.version = decoder.unpack_uint()
+        try:
+            self.ParserCls = self.VersionHandlers[self.version]
+        except KeyError:
+            raise RuntimeError("Incorrect extraction format version number")
 
-        self.siteCount = decoder.unpack_uhyper()
-        self.fieldCount = decoder.unpack_uint()
-        self._fieldHeaderLength = decoder.unpack_uint()
+        if not physical_units:
+            # Unit conversion only supported for version >= 6
+            assert self.version >= 6
 
-        if version == 4:
-            self.parser = ExtractedPropertyV4Parser(self.fieldCount, self.siteCount)
-        elif version == 5:
-            self.parser = ExtractedPropertyV5Parser(self.fieldCount, self.siteCount)
+        self.physical_units = physical_units
+        self.parser = self.ParserCls()
+        self.parser.ParseMainHeader(self._file, self)
+
+        self._ReadFieldHeader()
+        self._DetermineTimes()
+
+        # At this point, we can close the file. All external access uses memory maps.
+        self._file.close()
         return
 
     def _ReadFieldHeader(self):
@@ -251,17 +352,7 @@ class ExtractedProperty:
         This is suitable to passing to numpy.dtype to create the recarray
         data type.
         """
-        self._file.seek(MainHeaderLength)
-        fieldHeader = self._file.read(self._fieldHeaderLength)
-        assert (
-            len(fieldHeader) == self._fieldHeaderLength
-        ), "Did not read the correct length of the field header in extraction file '{}'".format(
-            self.filename
-        )
-
-        decoder = xdrlib.Unpacker(fieldHeader)
-
-        self._fieldSpec = self.parser.ParseFieldHeader(decoder)
+        self._fieldSpec = self.parser.ParseFieldHeader(self._file)
 
         self._rowLength = self._fieldSpec.GetRecordLength()
         self._recordLength = TimeStepDataLength + self._rowLength * self.siteCount
@@ -273,7 +364,11 @@ class ExtractedProperty:
         which times are contained within it.
         """
         filesize = os.path.getsize(self.filename)
-        self._totalHeaderLength = MainHeaderLength + self._fieldHeaderLength
+        self._totalHeaderLength = (
+            MagicVersionLength
+            + self.parser.MainHeaderLength
+            + self.parser.FieldHeaderLength
+        )
         bodysize = filesize - self._totalHeaderLength
         assert bodysize % self._recordLength == 0, (
             "Extraction file appears to have partial record(s), residual %s / %s , bodysize %s"
@@ -341,7 +436,7 @@ class ExtractedProperty:
         """
         mapped = self._MemMap(idx)
 
-        answer = self.parser.parse(mapped)
+        answer = self.parser.ParseTimeStep(mapped)
 
         answer.id = np.arange(self.siteCount)
         answer.position = self.voxelSizeMetres * answer.grid + self.originMetres

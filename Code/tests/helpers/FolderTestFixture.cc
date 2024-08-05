@@ -13,32 +13,39 @@
 #include <unistd.h>
 
 #include <catch2/catch.hpp>
-#include <tinyxml.h>
 
+#include "io/xml.h"
 #include "resources/Resource.h"
-#include "util/utilityFunctions.h"
+#include "util/clock.h"
 
 namespace fs = std::filesystem;
 
 namespace hemelb::tests::helpers
 {
-    void ModifyXMLInput(TiXmlDocument &document, std::vector<std::string> const& elements,
+    using Document = io::xml::Document;
+    using Element = io::xml::Element;
+
+    void ModifyXMLInput(Document &document, std::vector<std::string> const& elements,
                         std::string const& _value)
     {
+        auto child = document.GetRoot();
+        if (child.GetName() != "hemelbsettings")
+            throw (Exception() << "Root element not called 'hemelbsettings'");
+
+
+        // Point to the actual last *element* (cos last name in vector is the attribute).
         std::string const& attribute = elements.back();
-        // Point to the *actual last elem*
         auto end = --elements.end();
-        auto child = document.FirstChildElement("hemelbsettings");
+        // Use iterators to avoid last val
         for (auto iter = elements.begin(); iter != end; ++iter) {
             auto& name = *iter;
-            auto next_child = child->FirstChildElement(name);
-            if(next_child  == nullptr) {
-                next_child = new TiXmlElement(name);
-                child->LinkEndChild(next_child);
+            auto next_child = child.GetChildOrNull(name.c_str());
+            if (next_child  == Element::Missing()) {
+                next_child = child.AddChild(name.c_str());
             }
             child = next_child;
         }
-        child->SetAttribute(attribute, _value);
+        child.SetAttribute(attribute.c_str(), _value.c_str());
     }
 
     //! \brief Modify XML document by deleting an element if it exists
@@ -48,19 +55,19 @@ namespace hemelb::tests::helpers
     //! \param[in] elements: hierarchy of elements, last item will be removed.
     //!   Should not include "hemelbsettings"
     //! \param[in] value: Value to set the attribute to
-    void DeleteXMLInput(TiXmlDocument &document, std::vector<std::string> const& elements)
+    void DeleteXMLInput(Document &document, std::vector<std::string> const& elements)
     {
-        auto element = document.FirstChildElement("hemelbsettings");
-        for (std::string const &name : elements)
-        {
-            auto next_child = element->FirstChildElement(name);
-            if(next_child  == nullptr)
-            {
+        auto element = document.GetRoot();
+        if (element.GetName() != "hemelbsettings")
+            throw (Exception() << "Root element not called 'hemelbsettings'");
+        for (auto& name : elements) {
+            auto next_child = element.GetChildOrNull(name.c_str());
+            if (next_child  == Element::Missing())
                 return;
-            }
+
             element = next_child;
         }
-        element->Parent()->RemoveChild(element);
+        element.GetParentOrThrow().DeleteChild(element);
     }
 
     FolderTestFixture::FolderTestFixture()
@@ -94,7 +101,7 @@ namespace hemelb::tests::helpers
 
     namespace {
         std::int64_t HackyUUID() {
-            static std::int32_t uuid[2] = {getpid(), std::int32_t(util::myClock() * 100000)};
+            static std::int32_t uuid[2] = {getpid(), std::int32_t(util::clock() * 100000)};
             ++uuid[1];
             return *reinterpret_cast<std::int64_t*>(uuid);
         }
@@ -124,23 +131,19 @@ namespace hemelb::tests::helpers
                                            std::string const &_value) const
     {
         auto const filename = tempPath / resource;
-        TiXmlDocument document(filename.c_str());
-        document.LoadFile();
+        Document document;
+        document.LoadFile(filename);
         helpers::ModifyXMLInput(document, elements, _value);
-        std::ofstream output(filename);
-        [&](std::ostream& o, TiXmlDocument const& doc) {
-            o << doc;
-        } (output, document);
+        document.SaveFile(filename);
     }
 
     void FolderTestFixture::DeleteXMLInput(std::string const &resource, std::vector<std::string> const& elements) const
     {
         std::string const filename = tempPath / resource;
-        TiXmlDocument document(filename.c_str());
-        document.LoadFile();
+        Document document;
+        document.LoadFile(filename);
         helpers::DeleteXMLInput(document, elements);
-        std::ofstream output(filename);
-        output << document;
+        document.SaveFile(filename);
     }
 
     void FolderTestFixture::MoveToTempdir()

@@ -33,7 +33,7 @@ find_package(MPI REQUIRED)
 include(HemeLbDependency)
 
 add_hemelb_dependency(Boost)
-add_hemelb_dependency(TinyXML)
+add_hemelb_dependency(tinyxml2)
 add_hemelb_dependency(ParMETIS)
 add_hemelb_dependency(CTemplate)
 add_hemelb_dependency(ZLIB)

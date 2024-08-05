@@ -5,24 +5,14 @@
 
 #ifndef HEMELB_NET_PHASED_CONCERN_H
 #define HEMELB_NET_PHASED_CONCERN_H
-namespace hemelb
+namespace hemelb::net::phased
 {
-  namespace net
-  {
-    namespace phased
+    class Concern
     {
-      class Concern
-      {
-        public:
-          Concern()
-          {
-          }
-          virtual ~Concern()
-          {
-          }
-          virtual bool CallAction(int action)=0;
-      };
-    }
-  }
+    public:
+        Concern() = default;
+        virtual ~Concern() = default;
+        virtual bool CallAction(int action) = 0;
+    };
 }
-#endif //ONCE
+#endif

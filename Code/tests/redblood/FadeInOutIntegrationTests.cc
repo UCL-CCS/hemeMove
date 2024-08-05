@@ -4,10 +4,10 @@
 // license in the file LICENSE.
 
 #include <memory>
-#include <boost/uuid/uuid_io.hpp>
 #include <catch2/catch.hpp>
 
-#include "SimulationMaster.h"
+#include "SimulationController.h"
+#include "configuration/SimBuilder.h"
 #include "lb/lattices/D3Q19.h"
 #include "Traits.h"
 #include "redblood/Mesh.h"
@@ -23,7 +23,6 @@ namespace hemelb::tests
                      "[redblood][.long]") {
         using Traits = Traits<lb::D3Q19, lb::GuoForcingLBGK>;
         using CellControl = CellController<Traits>;
-        using MasterSim = SimulationMaster<Traits>;
 
       CopyResourceToTempdir("large_cylinder_rbc.xml");
       CopyResourceToTempdir("large_cylinder.gmy");
@@ -45,15 +44,15 @@ namespace hemelb::tests
 	"hemelb", "-in", "large_cylinder_rbc.xml",
       };
 
-      auto options = hemelb::configuration::CommandLine{argc, argv};
-      auto master = std::make_shared<MasterSim>(options, Comms());
+      auto options = configuration::CommandLine{argc, argv};
+      auto sim = configuration::SimBuilder::CreateSim<Traits>(options, Comms());
      
       SECTION("testIntegration") {
-	auto const & converter = master->GetUnitConverter();
+	auto const & converter = sim->GetUnitConverter();
 	auto const volumeFactor = std::pow(converter.ConvertToLatticeUnits("m", 1e0), -3)
 	  * 1e12;
 	bool didDropCell = false;
-	auto checkDidDropCell = [&didDropCell](const hemelb::redblood::CellContainer & cells)
+	auto checkDidDropCell = [&didDropCell](const CellContainer & cells)
 	  {
 	    didDropCell |= not cells.empty();
 	  };
@@ -79,11 +78,11 @@ namespace hemelb::tests
 	  static LatticePosition first, current, tenth;
 	  static int iter = 0;
 	  if(iter == 0) {
-	    first = cell->GetBarycenter();
+	    first = cell->GetBarycentre();
 	    current = first;
 	    tenth = first;
 	  }
-	  auto const position = cell->GetBarycenter();
+	  auto const position = cell->GetBarycentre();
 	  REQUIRE(Approx(first.x()).margin(1e-8) == position.x());
 	  REQUIRE(Approx(first.y()).margin(1e-8) == position.y());
 	  REQUIRE(current.z() <= position.z());
@@ -99,8 +98,8 @@ namespace hemelb::tests
 	  ++iter;
 	};
 
-	REQUIRE(master);
-	auto controller = std::static_pointer_cast<CellControl>(master->GetCellController());
+	REQUIRE(sim);
+	auto controller = std::static_pointer_cast<CellControl>(sim->GetCellController());
 	REQUIRE(controller);
 	controller->AddCellChangeListener(checkVolume);
 	controller->AddCellChangeListener(checkPosition);
@@ -116,7 +115,7 @@ namespace hemelb::tests
 	    }
 	    auto cell = *cells.begin();
 	    auto const tag = cell->GetTag();
-	    auto const b = cell->GetBarycenter();
+	    auto const b = cell->GetBarycentre();
 	    auto const v = cell->GetVolume();
 	    auto const e = (*cell)();
 	    HEMELB_CAPTURE5(iter, tag, b, v, e);
@@ -142,14 +141,14 @@ namespace hemelb::tests
 	// );
 
 	// run the simulation
-	master->RunSimulation();
-	master->Finalise();
+	sim->RunSimulation();
+	sim->Finalise();
 
 	AssertPresent("results/report.txt");
 	AssertPresent("results/report.xml");
 	REQUIRE(iter > 0);
 	REQUIRE(didDropCell);
-	REQUIRE(0ul == controller->GetCells().size());
+	REQUIRE(controller->GetCells().empty());
       }
     }
 

@@ -7,15 +7,14 @@
 #define HEMELB_CONSTANTS_H
 
 #include <limits>
-#include <cmath>
+#include <numbers>
 #include "units.h"
 
 namespace hemelb
 {
 
   constexpr unsigned int COLLISION_TYPES = 6;
-  // TODO: when we hit C++20, use std::pi_v
-  constexpr double PI = 3.14159265358979323846264338327950288;
+  constexpr auto PI = std::numbers::pi;
 
   constexpr double mmHg_TO_PASCAL = 133.3223874;
   constexpr double DEFAULT_FLUID_DENSITY_Kg_per_m3 = 1000.0;
@@ -32,22 +31,19 @@ namespace hemelb
   constexpr sitedata_t WALL_BOUNDARY = 2U;
   // const unsigned int CHARACTERISTIC_BOUNDARY = 3U;
 
-  constexpr unsigned int FLUID = 1U;
-  constexpr unsigned int INLET = 2U;
-  constexpr unsigned int OUTLET = 4U;
-  constexpr unsigned int WALL = 8U;
+  constexpr unsigned FLUID = 1U;
+  constexpr unsigned INLET = 2U;
+  constexpr unsigned OUTLET = 4U;
+  constexpr unsigned WALL = 8U;
 
   // square of the speed of sound
   constexpr double Cs2 = 1.0 / 3.0;
-  // speed of the sound (sqrt is not constexpr)
-  // TODO: when we hit C++20, use std::inv_sqrt3_v
-  const double Cs = 1.0 / std::sqrt(3.0);
+  constexpr auto Cs = std::numbers::inv_sqrt3;
 
   // TODO almost certainly filth.
-  constexpr distribn_t NO_VALUE = std::numeric_limits<distribn_t>::max();
-  constexpr int SITE_OR_BLOCK_SOLID = std::numeric_limits<int>::min();
-  constexpr int UNKNOWN_PROCESS = SITE_OR_BLOCK_SOLID + 1;
-
+  constexpr auto NO_VALUE = std::numeric_limits<distribn_t>::max();
+  constexpr auto SITE_OR_BLOCK_SOLID = std::numeric_limits<int>::min();
+  constexpr auto UNKNOWN_PROCESS = SITE_OR_BLOCK_SOLID + 1;
 }
 
 #endif //HEMELB_CONSTANTS_H

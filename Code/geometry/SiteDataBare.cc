@@ -7,11 +7,8 @@
 #include "geometry/SiteDataBare.h"
 #include "Exception.h"
 
-namespace hemelb
+namespace hemelb::geometry
 {
-
-  namespace geometry
-  {
     /**
      * Constructor for a SiteData object
      *
@@ -74,21 +71,6 @@ namespace hemelb
       }
     }
 
-    SiteData::SiteData(const SiteData& other) :
-      wallIntersection(other.wallIntersection), ioletIntersection(other.ioletIntersection),
-          type(other.type), ioletId(other.ioletId)
-    {
-    }
-
-    SiteData::SiteData() :
-      wallIntersection(0), ioletIntersection(0), type(SOLID_TYPE), ioletId(-1)
-    {
-    }
-
-    SiteData::~SiteData()
-    {
-    }
-
     bool SiteData::IsWall() const
     {
       return wallIntersection != 0;
@@ -116,7 +98,7 @@ namespace hemelb
             return OUTLET;
 
           case SOLID_TYPE:
-            throw Exception() << "Requesting collision type for solid site!";
+            throw (Exception() << "Requesting collision type for solid site!");
         }
       }
       else
@@ -134,12 +116,12 @@ namespace hemelb
             return OUTLET | WALL;
 
           case SOLID_TYPE:
-            throw Exception() << "Requesting collision type for solid site!";
+            throw (Exception() << "Requesting collision type for solid site!");
 
         }
       }
 
-      throw Exception() << "Requesting collision type for solid site!";
+      throw (Exception() << "Requesting collision type for solid site!");
       // The end of this function should never be reached. Adding return statement to please CRAY compiler
       return 0u;
     }
@@ -171,7 +153,5 @@ namespace hemelb
     {
       return wallIntersection;
     }
-
-  }
 
 }

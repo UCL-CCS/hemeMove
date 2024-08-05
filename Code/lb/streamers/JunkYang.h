@@ -76,12 +76,12 @@ namespace hemelb::lb
             }
         }
 
-        void StreamAndCollide(const site_t firstIndex, const site_t siteCount,
+        void StreamAndCollide(const site_t firstIndex, const site_t lastIndex,
                               const LbmParameters* lbmParams,
                               geometry::FieldData& latticeData,
                               lb::MacroscopicPropertyCache& propertyCache)
         {
-            for (site_t siteIndex = firstIndex; siteIndex < (firstIndex + siteCount); siteIndex++)
+            for (site_t siteIndex = firstIndex; siteIndex < lastIndex; siteIndex++)
             {
               HASSERT(latticeData.GetSite(siteIndex).IsWall());
               HASSERT(lMatrices.find(siteIndex) != lMatrices.end());
@@ -153,11 +153,11 @@ namespace hemelb::lb
 
         }
 
-        void PostStep(const site_t firstIndex, const site_t siteCount,
+        void PostStep(const site_t firstIndex, const site_t lastIndex,
                       const LbmParameters* lbmParams, geometry::FieldData& latticeData,
                       lb::MacroscopicPropertyCache& propertyCache)
         {
-            for (site_t siteIndex = firstIndex; siteIndex < (firstIndex + siteCount); siteIndex++)
+            for (site_t siteIndex = firstIndex; siteIndex < lastIndex; siteIndex++)
             {
               HASSERT(latticeData.GetSite(siteIndex).IsWall());
               HASSERT(lMatrices.find(siteIndex) != lMatrices.end());

@@ -27,6 +27,7 @@ namespace hemelb::net {
     public:
         static constexpr int IO_RANK = 0;
 
+        IOCommunicator() = default;
         explicit IOCommunicator(const MpiCommunicator& comm);
 
         inline bool OnIORank() const {

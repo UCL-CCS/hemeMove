@@ -124,9 +124,9 @@ namespace hemelb
           return operator()(in);
         }
 
-        //! Scale mesh around barycenter
+        //! Scale mesh around barycentre
         void operator*=(Dimensionless const &);
-        //! Linear transform of each vertex, centered around barycenter
+        //! Linear transform of each vertex, centered around barycentre
         void operator*=(util::Matrix3D const &);
         //! Translate mesh
         void operator+=(LatticePosition const &offset);
@@ -138,7 +138,7 @@ namespace hemelb
         //! Transform mesh
         void operator+=(std::vector<LatticePosition> const &displacements);
 
-        MeshData::Vertices::value_type GetBarycenter() const;
+        MeshData::Vertices::value_type GetBarycentre() const;
         LatticeVolume GetVolume() const
         {
           return volume(GetVertices(), GetTemplateMesh().GetFacets());

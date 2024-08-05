@@ -188,11 +188,11 @@ namespace hemelb
         }
         if (step == steps::Wait)
         {
-          (*timers)[hemelb::reporting::Timers::mpiWait].Start();
+          timers->mpiWait().Start();
         }
         if (step == steps::Send)
         {
-          (*timers)[hemelb::reporting::Timers::mpiSend].Start();
+          timers->mpiSend().Start();
         }
       }
 
@@ -204,11 +204,11 @@ namespace hemelb
         }
         if (step == steps::Wait)
         {
-          (*timers)[hemelb::reporting::Timers::mpiWait].Stop();
+            timers->mpiWait().Stop();
         }
         if (step == steps::Send)
         {
-          (*timers)[hemelb::reporting::Timers::mpiSend].Stop();
+            timers->mpiSend().Stop();
         }
       }
     }

@@ -32,8 +32,8 @@ const std::vector<$typename>& test_data<$typename>::unpacked() {
 }
 
 template<>
-const std::vector<char>& test_data<$typename>::packed() {
-  static const std::vector<char> packed = {$buffer_data};
+const std::vector<std::byte>& test_data<$typename>::packed() {
+  static const std::vector<std::byte> packed = {$buffer_data};
   return packed;
 };""")
 
@@ -77,7 +77,7 @@ def mk_specialisation_int(signed: bool, nbits: int) -> str:
     for v in values:
         pack(v)
 
-    buffer_data = ", ".join(f"'\\x{x:02x}'" for x in p.get_buffer())
+    buffer_data = ", ".join(f"std::byte{{{x}}}" for x in p.get_buffer())
     return spec_template.substitute(locals())
 
 def mk_specialisation_float(nbits: int) -> str:
@@ -103,7 +103,7 @@ def mk_specialisation_float(nbits: int) -> str:
     for v in fltvals:
         pack(v)
     values_code = ",\n    ".join(f"{func_name}(0x{v:x})" for v in intvals)
-    buffer_data = ", ".join(f"'\\x{x:02x}'" for x in p.get_buffer())
+    buffer_data = ", ".join(f"std::byte{{{x}}}" for x in p.get_buffer())
     return spec_template.substitute(locals())
 
 def mk_specialisation_string() -> str:
@@ -119,7 +119,7 @@ def mk_specialisation_string() -> str:
     for v in values:
         p.pack_string(v.encode())
     values_code = ",\n    ".join(f'"{v}"' for v in values)
-    buffer_data = ", ".join(f"'\\x{x:02x}'" for x in p.get_buffer())
+    buffer_data = ", ".join(f"std::byte{{{x}}}" for x in p.get_buffer())
     return spec_template.substitute(locals())
 
 def mk_header():
@@ -133,22 +133,18 @@ def mk_header():
 #define HEMELB_TESTS_IO_XDR_TEST_DATA_H
 #include <vector>
 
-namespace hemelb
+namespace hemelb::tests
 {
-  namespace tests
-  {
     template <typename T>
     struct test_data {
       static const std::vector<T>& unpacked();
-      static const std::vector<char>& packed();
+      static const std::vector<std::byte>& packed();
     };
-  }
 }
 #endif
 """
 
-    impl_template = string.Template("""
-// This file is part of HemeLB and is Copyright (C)
+    impl_template = string.Template("""// This file is part of HemeLB and is Copyright (C)
 // the HemeLB team and/or their institutions, as detailed in the
 // file AUTHORS. This software is provided under the terms of the
 // license in the file LICENSE.
@@ -159,26 +155,23 @@ namespace hemelb
 #include <cstring>
 #include <string>
 
-namespace hemelb
+namespace hemelb::tests
 {
-  namespace tests
-  {
 
     namespace {
-      float binflt(std::uint32_t x) {
-        float ans;
-        std::memcpy(&ans, &x, 4);
-        return ans;
-      }
-      double bindbl(std::uint64_t x) {
-        double ans;
-        std::memcpy(&ans, &x, 8);
-        return ans;
-      }
+        float binflt(std::uint32_t x) {
+            float ans;
+            std::memcpy(&ans, &x, 4);
+            return ans;
+        }
+        double bindbl(std::uint64_t x) {
+            double ans;
+            std::memcpy(&ans, &x, 8);
+            return ans;
+        }
     }
     $specialisations
 
-  }
 }
 """)
     specs = [

@@ -4,9 +4,13 @@
 // license in the file LICENSE.
 
 #include "lb/iolets/BoundaryValues.h"
-#include "lb/iolets/BoundaryComms.h"
-#include "util/utilityFunctions.h"
+
 #include <algorithm>
+
+#include "geometry/Domain.h"
+#include "lb/iolets/BoundaryComms.h"
+#include "log/Logger.h"
+#include "util/numerical.h"
 
 namespace hemelb::lb
 {
@@ -31,7 +35,7 @@ namespace hemelb::lb
           iolet->Initialise(&unitConverter);
 
           bool isIoletOnThisProc = IsIoletOnThisProc(latticeData, ioletIndex);
-          hemelb::log::Logger::Log<hemelb::log::Debug, hemelb::log::OnePerCore>("BOUNDARYVALUES.CC - isioletonthisproc? : %d",
+          log::Logger::Log<log::Debug, log::OnePerCore>("BOUNDARYVALUES.CC - isioletonthisproc? : %d",
                                                                                 isIoletOnThisProc);
           procsList[ioletIndex] = GatherProcList(isIoletOnThisProc);
 
@@ -161,7 +165,7 @@ namespace hemelb::lb
       // This assumes the program has already waited for comms to finish before
       LatticeDensity BoundaryValues::GetBoundaryDensity(const int index)
       {
-        return iolets[index]->GetDensity(state->Get0IndexedTimeStep());
+        return iolets[index]->GetDensity(state->GetTimeStep());
       }
 
       LatticeDensity BoundaryValues::GetDensityMin(int iBoundaryId)

@@ -8,7 +8,7 @@
 #include <catch2/catch.hpp>
 
 #include "configuration/CommandLine.h"
-#include "io/PathManager.h"
+#include "configuration/PathManager.h"
 
 #include "tests/helpers/FolderTestFixture.h"
 
@@ -17,7 +17,7 @@ namespace fs = std::filesystem;
 namespace hemelb::tests
 {
 
-    std::unique_ptr<io::PathManager> setup(const char* confXml) {
+    std::unique_ptr<configuration::PathManager> setup(const char* confXml) {
         const int processorCount = 5;
         const int argc = 3;
         const char* argv[] = {
@@ -27,7 +27,7 @@ namespace hemelb::tests
         };
 
         auto cl = configuration::CommandLine(argc, argv);
-        return std::make_unique<io::PathManager>(cl, true, processorCount);
+        return std::make_unique<configuration::PathManager>(cl, true, processorCount);
     }
 
     TEST_CASE_METHOD(helpers::FolderTestFixture, "PathManager") {

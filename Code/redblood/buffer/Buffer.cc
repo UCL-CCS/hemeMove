@@ -14,15 +14,15 @@ namespace hemelb::redblood::buffer
       {
         LatticeDistance maxCellRadius(CellBase const& cell)
         {
-          auto const barycenter = cell.GetBarycenter();
+          auto const barycentre = cell.GetBarycentre();
           auto const &vertices = cell.GetVertices();
           auto const first = vertices.begin();
-          auto dist = [&barycenter](LatticePosition const &a, LatticePosition const &b)
+          auto dist = [&barycentre](LatticePosition const &a, LatticePosition const &b)
           {
-            return (a-barycenter).GetMagnitudeSquared() < (b-barycenter).GetMagnitudeSquared();
+            return (a-barycentre).GetMagnitudeSquared() < (b-barycentre).GetMagnitudeSquared();
           };
           LatticePosition const &max = *std::max_element(first, vertices.end(), dist);
-          return 4e0 * (max - barycenter).GetMagnitudeSquared();
+          return 4e0 * (max - barycentre).GetMagnitudeSquared();
         }
 
         template<class T_FUNC>
@@ -49,7 +49,7 @@ namespace hemelb::redblood::buffer
         auto const &normal = geometry->normal;
         auto getdist = [&normal](CellContainer::value_type const& c)
         {
-          return Dot(c->GetBarycenter(), normal);
+          return Dot(c->GetBarycentre(), normal);
         };
         return orderedCell(getdist, virtuals);
       }
@@ -59,7 +59,7 @@ namespace hemelb::redblood::buffer
         auto const &normal = geometry->normal;
         auto getdist = [&normal](const CellContainer::value_type& c)
         {
-          return -Dot(c->GetBarycenter(), normal);
+          return -Dot(c->GetBarycentre(), normal);
         };
         return orderedCell(getdist, virtuals);
       }
@@ -69,7 +69,7 @@ namespace hemelb::redblood::buffer
         justDropped = nearestCell();
         virtuals.erase(justDropped);
 
-        lastZ = Dot(justDropped->GetBarycenter(), geometry->normal);
+        lastZ = Dot(justDropped->GetBarycentre(), geometry->normal);
         *justDropped += geometry->origin + geometry->normal * offset;
         return justDropped;
       }
@@ -110,7 +110,7 @@ namespace hemelb::redblood::buffer
           lastCell = furthestCell();
         }
         // add cell until outside geometry, including interaction radius buffer.
-        while (isDroppablePosition(lastCell->GetBarycenter() - geometry->normal * interactionRadius))
+        while (isDroppablePosition(lastCell->GetBarycentre() - geometry->normal * interactionRadius))
         {
           lastCell = insertCell();
         }
@@ -157,13 +157,13 @@ namespace hemelb::redblood::buffer
         }
 
         auto const normal = geometry->normal;
-        auto const zCell = Dot(normal, nearestCell()->GetBarycenter());
+        auto const zCell = Dot(normal, nearestCell()->GetBarycentre());
         if (not justDropped)
         {
           offset = -zCell;
           return;
         }
-        auto const zDropped = Dot(normal, justDropped->GetBarycenter() - geometry->origin) - offset;
+        auto const zDropped = Dot(normal, justDropped->GetBarycentre() - geometry->origin) - offset;
         // dropped cell moved forward but distance with next cell is small
         // Then movement must the smallest of:
         // - distance moved by dropped cell over last LB iteration

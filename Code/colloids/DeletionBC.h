@@ -8,6 +8,7 @@
 
 #include "colloids/BoundaryConditions.h"
 #include "configuration/SimConfig.h"
+#include "configuration/SimConfigReader.h"
 
 namespace hemelb
 {

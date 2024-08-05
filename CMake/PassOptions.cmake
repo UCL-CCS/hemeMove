@@ -32,23 +32,54 @@ function(pass_option GROUP NAME DESC DEFAULT)
 endfunction()
 
 
+# Types for the cachevar functions below are the allowed CMake types
+# (BOOL, FILEPATH, PATH, STRING, INTERNAL) plus INT.
+# These helpers convert from these to supported types in CMake/C++.
+
+# Note that std::filesystem::path is not constexpr so use ct_string for those
+function(_pass_type_to_cpp type out_type out_val)
+  if (type STREQUAL "INT")
+    set(${out_type} "int" PARENT_SCOPE)
+    set(${out_val} "\${${NAME}}" PARENT_SCOPE)
+  elseif (type STREQUAL "BOOL")
+    set(${out_type} "bool" PARENT_SCOPE)
+    set(${out_val} "\${${NAME}}" PARENT_SCOPE)
+  else()
+    set(${out_type} "ct_string" PARENT_SCOPE)
+    set(${out_val} "\"\${${NAME}}\"" PARENT_SCOPE)
+  endif()
+endfunction()
+
+# CMake doesn't do numbers, use string
+function(_pass_type_to_cachevar type outvar)
+  if (type STREQUAL "INT")
+    set(${outvar} "STRING" PARENT_SCOPE)
+  else()
+    set(${outvar} ${type} PARENT_SCOPE)
+  endif()
+endfunction()
+
 #
 # Declare a cache variable
 #
 function(pass_cachevar GROUP NAME DEFAULT TYPE DESC)
-  set(${NAME} ${DEFAULT} CACHE ${TYPE} ${DESC})
+  _pass_type_to_cachevar(${TYPE} cache_type)
+  set(${NAME} ${DEFAULT} CACHE ${cache_type} ${DESC})
   set(_${GROUP}_CACHEVARS "${_${GROUP}_CACHEVARS};${NAME}" PARENT_SCOPE)
   string(REPLACE "HEMELB_" "" BASENAME "${NAME}")
-  set(_${GROUP}_CLSDEFN "${_${GROUP}_CLSDEFN}        static constexpr ct_string ${BASENAME} = \"\${${NAME}}\";
+  _pass_type_to_cpp(${TYPE} cpp_type cpp_val)
+  set(_${GROUP}_CLSDEFN "${_${GROUP}_CLSDEFN}        static constexpr ${cpp_type} ${BASENAME} = ${cpp_val};
 " PARENT_SCOPE)
 endfunction()
 
 function(pass_cachevar_choice GROUP NAME DEFAULT TYPE DESC)
   # ${ARGN} holds the choices
-  set(${NAME} ${DEFAULT} CACHE ${TYPE} ${DESC})
+  _pass_type_to_cachevar(${TYPE} cache_type)
+  set(${NAME} ${DEFAULT} CACHE ${cache_type} ${DESC})
   set(_${GROUP}_CACHEVARS "${_${GROUP}_CACHEVARS};${NAME}" PARENT_SCOPE)
   string(REPLACE "HEMELB_" "" BASENAME "${NAME}")
-  set(_${GROUP}_CLSDEFN "${_${GROUP}_CLSDEFN}        static constexpr ct_string ${BASENAME} = \"\${${NAME}}\";
+  _pass_type_to_cpp(${TYPE} cpp_type cpp_val)
+  set(_${GROUP}_CLSDEFN "${_${GROUP}_CLSDEFN}        static constexpr ${cpp_type} ${BASENAME} = ${cpp_val};
 " PARENT_SCOPE)
   set_property(CACHE ${NAME} PROPERTY STRINGS ${ARGN})
 endfunction()

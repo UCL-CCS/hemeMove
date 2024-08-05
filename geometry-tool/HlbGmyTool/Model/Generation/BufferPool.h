@@ -14,15 +14,15 @@ class BufferPool {
   BufferPool(unsigned int);
   ~BufferPool();
   // Returns an uninitialized buffer
-  char* New();
+  std::byte* New();
   // Return a buffer to the pool or free it
-  void Free(char*);
+  void Free(std::byte*);
   // Returns the size of buffers managed by the pool
   unsigned int GetSize() const;
 
  private:
   unsigned int size;
-  std::stack<char*> unused;
+  std::stack<std::byte*> unused;
 };
 
 #endif

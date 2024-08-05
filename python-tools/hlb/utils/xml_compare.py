@@ -11,6 +11,55 @@ import numpy as np
 QuantityKeys = {"units", "value"}
 
 
+def is_quantity_attrib(attrs):
+    """Is the attribute dict correct for a HemeLB quantity?"""
+    return set(attrs.keys()) == QuantityKeys
+
+
+def val_to_float(val_txt):
+    """Convert a string to float, handling hex floats"""
+    hex_pos = val_txt.find("0x")
+    if hex_pos == 0 or hex_pos == 1:
+        return float.fromhex(val_txt)
+    else:
+        return float(val_txt)
+
+
+def val_to_vec3(txt):
+    """Convert a serialised hemelb::util::Vector3D<double> to numpy array."""
+    if not txt.startswith("(") and txt.endswith(")"):
+        raise ValueError("invalid format for HemeLB Vector3D")
+    vals = [val_to_float(x) for x in txt[1:-1].split(",")]
+    return np.array(vals, dtype=float)
+
+
+class Is:
+    """Instances check if a string can be converted without errror by
+    the supplied callable.
+    """
+
+    def __init__(self, ctor):
+        self.ctor = ctor
+
+    def __call__(self, txt):
+        try:
+            self.ctor(txt)
+        except ValueError:
+            return False
+        else:
+            return True
+
+
+class Both:
+    """Instances check `Is` for both supplied values."""
+
+    def __init__(self, ctor):
+        self.Is = Is(ctor)
+
+    def __call__(self, a, b):
+        return self.Is(a) and self.Is(b)
+
+
 class QuantityCheck:
     def __init__(self, tol=1e-8):
         self.tol = tol
@@ -25,23 +74,26 @@ class QuantityCheck:
         assert ref["units"] == test["units"], f"Units differ for '{checker.path}'"
 
 
+class IntQuantityCheck(QuantityCheck):
+    def __call__(self, checker, ref, test):
+        super().__call__(checker, ref, test)
+        rval = int(ref["value"])
+        tval = int(test["value"])
+        assert rval == tval, f"Values differ for '{checker.path}'"
+
+
 class ScalarQuantityCheck(QuantityCheck):
     def __call__(self, checker, ref, test):
         super().__call__(checker, ref, test)
-        rval = float(ref["value"])
-        tval = float(test["value"])
+        rval = val_to_float(ref["value"])
+        tval = val_to_float(test["value"])
         assert np.abs(rval - tval) < self.tol, f"Values differ for '{checker.path}'"
 
 
 class VectorQuantityCheck(QuantityCheck):
-    @staticmethod
-    def vec3(txt):
-        assert txt.startswith("(") and txt.endswith(")")
-        return np.array(txt[1:-1].split(","), dtype=float)
-
     def __call__(self, checker, ref, test):
-        rval = self.vec3(ref["value"])
-        tval = self.vec3(test["value"])
+        rval = val_to_vec3(ref["value"])
+        tval = val_to_vec3(test["value"])
         assert np.all(
             np.abs(rval - tval) < self.tol
         ), f"Values differ for '{checker.path}'"
@@ -89,6 +141,18 @@ class XmlChecker:
 
         if check is None:
             check = self.default_check_attrib
+            if is_quantity_attrib(rAttr):
+                rval = rAttr["value"]
+                if "value" in tAttr:
+                    tval = tAttr["value"]
+                    if Both(int)(rval, tval):
+                        chk = IntQuantityCheck()
+                    elif Both(val_to_vec3)(rval, tval):
+                        chk = VectorQuantityCheck()
+                    else:
+                        chk = ScalarQuantityCheck()
+                    check = partial(chk, self)
+
         check(rAttr, tAttr)
 
     def default_check_attrib(self, rAttr, tAttr):

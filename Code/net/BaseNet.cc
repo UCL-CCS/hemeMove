@@ -14,7 +14,7 @@
 #include <cstdio>
 
 #include "net/BaseNet.h"
-#include "util/utilityFunctions.h"
+#include "util/numerical.h"
 #include "util/Vector3D.h"
 #include "net/IOCommunicator.h"
 namespace hemelb

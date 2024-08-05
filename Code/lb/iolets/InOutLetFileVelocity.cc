@@ -8,7 +8,7 @@
 #include <fstream>
 #include "hassert.h"
 #include "log/Logger.h"
-#include "util/utilityFunctions.h"
+#include "util/numerical.h"
 #include "configuration/SimConfig.h"
 #include <cmath>
 
@@ -25,7 +25,48 @@ namespace hemelb::lb
         return copy;
     }
 
-    void InOutLetFileVelocity::CalculateTable(LatticeTimeStep totalTimeSteps, PhysicalTime timeStepLength)
+    template<typename T>
+    T LinearInterpolate(std::vector<T> const& xVector, std::vector<T> const& yVector, T targetX)
+    {
+        int lowerIndex = 0;
+
+        if (log::Logger::ShouldDisplay<log::Debug>())
+        {
+            if (targetX < xVector[0] || targetX > xVector[xVector.size() - 1])
+            {
+                log::Logger::Log<log::Warning, log::OnePerCore>("Linear Interpolation beyond bounds: %f is not between %f and %f",
+                                                                targetX,
+                                                                xVector[0],
+                                                                xVector[xVector.size() - 1]);
+            }
+        }
+
+        while (! (targetX >= xVector[lowerIndex] && targetX <= xVector[lowerIndex + 1]))
+        {
+            lowerIndex++;
+        }
+
+        // If discontinuities are present in the trace the correct behaviour is ill-defined.
+        if (log::Logger::ShouldDisplay<log::Debug>())
+        {
+            if (xVector[lowerIndex] == xVector[lowerIndex + 1])
+            {
+                log::Logger::Log<log::Warning, log::OnePerCore>("Multiple points for same x value in LinearInterpolate: ");
+                log::Logger::Log<log::Warning, log::OnePerCore>("(%f, %f) and (%f, %f). Division by zero!",
+                                                                xVector[lowerIndex],
+                                                                yVector[lowerIndex],
+                                                                xVector[lowerIndex + 1],
+                                                                yVector[lowerIndex + 1]);
+            }
+        }
+
+        // Linear interpolation of function f(x) between two points A and B
+        // f(A) + (fraction along x axis between A and B) * (f(B) - f(A))
+        return std::lerp(yVector[lowerIndex], yVector[lowerIndex + 1],
+                         (targetX - xVector[lowerIndex]) / (xVector[lowerIndex + 1] - xVector[lowerIndex]));
+    }
+
+    void InOutLetFileVelocity::CalculateTable(LatticeTimeStep startTS, LatticeTimeStep endTS, PhysicalTime timeStepLength)
     {
         // First read in values from file
         // Used to be complex code here to keep a vector unique, but this is just achieved by using a map.
@@ -52,36 +93,30 @@ namespace hemelb::lb
         std::vector<PhysicalSpeed> values(0);
 
         // Must convert into vectors since LinearInterpolate works on a pair of vectors
-        // Determine min and max pressure on the way
-//        PhysicalPressure pMin = timeValuePairs.begin()->second;
-//        PhysicalPressure pMax = timeValuePairs.begin()->second;
-        for (std::map<PhysicalTime, PhysicalSpeed>::iterator entry = timeValuePairs.begin();
-            entry != timeValuePairs.end(); entry++)
+        PhysicalTime t_max = endTS * timeStepLength;
+        for (auto& [time, speed]: timeValuePairs)
         {
+            /* If the time value in the input file stretches BEYOND the end of the simulation, then insert an interpolated end value and exit the loop. */
+            if (time > t_max) {
+                PhysicalTime time_diff = t_max - times.back();
 
-          /* If the time value in the input file stretches BEYOND the end of the simulation, then insert an interpolated end value and exit the loop. */
-          if(entry->first > totalTimeSteps*timeStepLength) {
-  
-            PhysicalTime time_diff = totalTimeSteps*timeStepLength - times.back();
+                PhysicalTime time_diff_ratio = time_diff / (time - times.back());
+                PhysicalSpeed vel_diff = speed - values.back();
 
-            PhysicalTime time_diff_ratio = time_diff / (entry->first - times.back());
-            PhysicalSpeed vel_diff = entry->second - values.back();
+                PhysicalSpeed final_velocity = values.back() + time_diff_ratio * vel_diff;
 
-            PhysicalSpeed final_velocity = values.back() + time_diff_ratio * vel_diff;
+                times.push_back(t_max);
+                values.push_back(final_velocity);
+                break;
+            }
 
-            times.push_back(totalTimeSteps*timeStepLength);
-            values.push_back(final_velocity);
-            break;
-          }
-
-          times.push_back(entry->first);
-          values.push_back(entry->second);
+            times.push_back(time);
+            values.push_back(speed);
         }
-//        densityMin = units->ConvertPressureToLatticeUnits(pMin) / Cs2;
-//        densityMax = units->ConvertPressureToLatticeUnits(pMax) / Cs2;
 
         /* If the time values in the input file end BEFORE the planned end of the simulation, then loop the profile afterwards (using %TimeStepsInInletVelocityProfile). */
-        int TimeStepsInInletVelocityProfile = times.back() / timeStepLength;
+        PhysicalTime duration = (times.back() - times.front());
+        int TimeStepsInInletVelocityProfile = duration / timeStepLength;
 
         // Check if last point's value matches the first
         if (values.back() != values.front())
@@ -89,26 +124,24 @@ namespace hemelb::lb
               << velocityFilePath;
 
         // extend the table to one past the total time steps, so that the table is valid in the end-state, where the zero indexed time step is equal to the limit.
-        velocityTable.resize(totalTimeSteps + 1);
+        //auto totalTimeSteps = endTS - startTS;
+        velocityTable.resize(endTS + 1);
         // Now convert these vectors into arrays using linear interpolation
-        for (unsigned int timeStep = 0; timeStep <= totalTimeSteps; timeStep++)
+        for (unsigned int time_step = 0; time_step <= endTS; ++time_step)
         {
-          // The "% TimeStepsInInletVelocityProfile" here is to prevent profile stretching (it will loop instead).
-          double point = times.front()
-              + (static_cast<double>(timeStep % TimeStepsInInletVelocityProfile) / static_cast<double>(totalTimeSteps))
-                  * (times.back() - times.front());
+            // The "% TimeStepsInInletVelocityProfile" here is to prevent profile stretching (it will loop instead).
+            double point = times.front() +
+                    (double(time_step % TimeStepsInInletVelocityProfile) / double(endTS)) * duration;
 
-          PhysicalSpeed vel = util::NumericalFunctions::LinearInterpolate(times, values, point);
-
-          velocityTable[timeStep] = units->ConvertVelocityToLatticeUnits(vel);
+            PhysicalSpeed vel = LinearInterpolate(times, values, point);
+            velocityTable[time_step] = units->ConvertVelocityToLatticeUnits(vel);
         }
 
       }
 
-      LatticeVelocity InOutLetFileVelocity::GetVelocity(const LatticePosition& x,
-                                                        const LatticeTimeStep t) const
-      {
-
+    LatticeVelocity InOutLetFileVelocity::GetVelocity(const LatticePosition& x,
+                                                      const LatticeTimeStep t) const
+    {
         if (!useWeightsFromFile)
         {
           // v(r) = vMax (1 - r**2 / a**2)
@@ -261,10 +294,11 @@ namespace hemelb::lb
         log::Logger::Log<log::Warning, log::OnePerCore>("Initializing vInlet.");
         units = unitConverter;
 
-        useWeightsFromFile = false;
-        #ifdef HEMELB_USE_VELOCITY_WEIGHTS_FILE
-        useWeightsFromFile = true;
-        #endif
+        if constexpr (build_info::USE_VELOCITY_WEIGHTS_FILE) {
+            useWeightsFromFile = true;
+        } else {
+            useWeightsFromFile = false;
+        }
 
         if(useWeightsFromFile) {
           //if the new velocity approximation is enabled, then we want to create a lookup table here.

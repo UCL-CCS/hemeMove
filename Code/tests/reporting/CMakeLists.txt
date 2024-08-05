@@ -3,7 +3,6 @@
 # file AUTHORS. This software is provided under the terms of the
 # license in the file LICENSE.
 add_test_lib(test_reporting
-  Mocks.cc
   ReporterTests.cc
   TimerTests.cc
 )

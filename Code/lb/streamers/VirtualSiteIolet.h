@@ -130,13 +130,13 @@ namespace hemelb::lb
            * links will be done in the post-step as we must ensure that all
            * the data is available to construct virtual sites.
            */
-          void StreamAndCollide(const site_t firstIndex, const site_t siteCount,
+          void StreamAndCollide(const site_t firstIndex, const site_t lastIndex,
                                          const LbmParameters* lbmParams,
                                          geometry::FieldData& latDat,
                                          lb::MacroscopicPropertyCache& propertyCache)
           {
             auto&& dom = latDat.GetDomain();
-            for (site_t siteIndex = firstIndex; siteIndex < (firstIndex + siteCount); siteIndex++)
+            for (site_t siteIndex = firstIndex; siteIndex < lastIndex; siteIndex++)
             {
               auto&& site = latDat.GetSite(siteIndex);
               VarsType hydroVars(site);
@@ -184,14 +184,14 @@ namespace hemelb::lb
             }
           }
 
-          void PostStep(const site_t firstIndex, const site_t siteCount,
+          void PostStep(const site_t firstIndex, const site_t lastIndex,
                                  const LbmParameters* lbmParams, geometry::FieldData* latDat,
                                  lb::MacroscopicPropertyCache& propertyCache)
           {
             const LatticeTimeStep t = bValues->GetTimeStep();
             const typename VSiteByLocalIdxMultiMap::iterator beginVSites =
                 vsByLocalIdx.lower_bound(firstIndex), endVSites =
-                vsByLocalIdx.lower_bound(firstIndex + siteCount);
+                vsByLocalIdx.lower_bound(lastIndex);
 
             for (typename VSiteByLocalIdxMultiMap::iterator vSiteIt = beginVSites;
                 vSiteIt != endVSites; ++vSiteIt)

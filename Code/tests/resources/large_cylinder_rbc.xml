@@ -1,9 +1,8 @@
 <?xml version="1.0" ?>
-<hemelbsettings version="5">
+<hemelbsettings version="6">
   <simulation>
     <step_length units="s" value="2.e-7" />
     <steps units="lattice" value="500" />
-    <stresstype value="1" />
     <voxel_size units="m" value="1.4e-06" />
     <origin units="m" value="(-1.05e-05,-1.05e-05,-2.45e-05)" />
   </simulation>
@@ -13,8 +12,8 @@
   <inlets>
     <inlet>
       <condition type="pressure" subtype="cosine">
-        <amplitude value="0.0" units="mmHg" />
-        <mean value="0.1" units="mmHg" />
+        <amplitude value="0.0" units="Pa" />
+        <mean value="0.1" units="Pa" />
         <phase value="0" units="rad" />
         <period value="1" units="s" />
       </condition>
@@ -26,6 +25,7 @@
         <fadelength units="m" value="7e-06" />
       </flowextension>
       <insertcell template="default">
+	<seed value="321" />
         <every units="s" value="2e-0"/>
         <offset units="s" value="40e-8"/>
         <delta_t units="s" value="0e0"/>
@@ -41,8 +41,8 @@
   <outlets>
     <outlet>
       <condition type="pressure" subtype="cosine">
-        <amplitude value="0." units="mmHg" />
-        <mean value="0.0" units="mmHg" />
+        <amplitude value="0." units="Pa" />
+        <mean value="0.0" units="Pa" />
         <phase value="0" units="rad" />
         <period value="1" units="s" />
       </condition>
@@ -62,18 +62,6 @@
      <field type="pressure"/> 
    </propertyoutput> 
   </properties>    
-  <visualisation>
-    <centre units="m" value="(0.0,0.0,0.0)" />
-    <orientation>
-      <longitude units="deg" value="45.0" />
-      <latitude units="deg" value="45.0" />
-    </orientation>
-    <display brightness="0.03" zoom="1.0" />
-    <range>
-      <maxvelocity units="m/s" value="0.1" />
-      <maxstress units="Pa" value="0.1" />
-    </range>
-  </visualisation>
   <redbloodcells>
     <controller>
       <boxsize units="lattice" value="3" />
@@ -88,7 +76,7 @@
       <cutoffdistance units="lattice" value="1.0" />
       <exponent value="2"/>
     </cell2Wall>
-    <cells>
+    <templates>
       <cell name="default">
         <moduli>
           <bending units="Nm" value="2e-19" />
@@ -111,14 +99,17 @@
         <shape mesh_path="red_blood_cell.txt" mesh_format="Krueger" />
         <scale units="m" value="8e-06" />
       </cell>
-    </cells>
+    </templates>
     <output>
-      <period units="lattice" value="100" />
+      <vtk>
+        <period units="lattice" value="100" />
+        <physical units="bool" value="true" />
+      </vtk>
     </output>
   </redbloodcells>
   <initialconditions>
     <pressure>
-      <uniform units="mmHg" value="0.0" />
+      <uniform units="Pa" value="0.0" />
     </pressure>
   </initialconditions>
   <monitoring>

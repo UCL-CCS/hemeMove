@@ -82,9 +82,9 @@ namespace hemelb
     {
       return static_cast<site_t>(data->vertices.size());
     }
-    MeshData::Vertices::value_type CellBase::GetBarycenter() const
+    MeshData::Vertices::value_type CellBase::GetBarycentre() const
     {
-      return barycenter(data->vertices);
+      return barycentre(data->vertices);
     }
 
     //! Scale to apply to the template mesh
@@ -101,21 +101,21 @@ namespace hemelb
 
     void CellBase::operator*=(Dimensionless const &scaleIn)
     {
-      auto const barycenter = GetBarycenter();
+      auto const barycentre = GetBarycentre();
 
       for (auto &vertex : data->vertices)
       {
-        vertex = (vertex - barycenter) * scaleIn + barycenter;
+        vertex = (vertex - barycentre) * scaleIn + barycentre;
       }
     }
     void CellBase::operator*=(util::Matrix3D const &rotation)
     {
-      auto const barycenter = GetBarycenter();
+      auto const barycentre = GetBarycentre();
 
       for (auto &vertex : data->vertices)
       {
-        rotation.timesVector(vertex - barycenter, vertex);
-        vertex += barycenter;
+        rotation.timesVector(vertex - barycentre, vertex);
+        vertex += barycentre;
       }
     }
     void CellBase::operator+=(LatticePosition const &offset)

@@ -22,8 +22,20 @@ namespace hemelb::lb
 
     class SimulationState : public reporting::Reportable
     {
+    private:
+        static constexpr LatticeTimeStep DEFAULT_INITIAL_TIME = 0;
+        PhysicalTime timeStepLength;
+        LatticeTimeStep timeStep = DEFAULT_INITIAL_TIME;
+        LatticeTimeStep startTimeStep = DEFAULT_INITIAL_TIME;
+        LatticeTimeStep endTimeStep;
+        bool isTerminating;
+        Stability stability;
+
+        // To allow setting time stuff
+        friend struct InitialConditionBase;
+
     public:
-        SimulationState(double timeStepLength, unsigned long totalTimeSteps);
+        SimulationState(double timeStepLength, unsigned long endTimeStep);
         ~SimulationState() noexcept override = default;
 
         void Increment();
@@ -31,30 +43,32 @@ namespace hemelb::lb
         void SetIsTerminating(bool value);
         void SetStability(Stability value);
 
-        LatticeTimeStep GetTimeStep() const;
-        LatticeTimeStep Get0IndexedTimeStep() const;
-        LatticeTimeStep GetTotalTimeSteps() const;
-        bool IsTerminating() const;
-        Stability GetStability() const;
-
-        PhysicalTime GetTime() const
-        {
-          return GetTimeStepLength() * Get0IndexedTimeStep();
+        [[nodiscard]] inline LatticeTimeStep GetStartTimeStep() const {
+            return startTimeStep;
         }
-        PhysicalTime GetTimeStepLength() const
+        [[nodiscard]] inline LatticeTimeStep GetEndTimeStep() const {
+            return endTimeStep;
+        }
+        [[nodiscard]] inline LatticeTimeStep GetTimeStep() const {
+            return timeStep;
+        }
+        [[nodiscard]] inline LatticeTimeStep GetTimeStepsElapsed() const {
+            return timeStep - startTimeStep;
+        }
+
+        [[nodiscard]] bool IsTerminating() const;
+        [[nodiscard]] Stability GetStability() const;
+
+        [[nodiscard]] inline PhysicalTime GetTime() const
+        {
+          return GetTimeStepLength() * GetTimeStep();
+        }
+        [[nodiscard]] inline PhysicalTime GetTimeStepLength() const
         {
           return timeStepLength;
         }
 
         void Report(reporting::Dict& dictionary) override;
-
-    private:
-        PhysicalTime timeStepLength;
-        LatticeTimeStep timeStep;
-        LatticeTimeStep totalTimeSteps;
-        bool isTerminating;
-        Stability stability;
-        friend struct InitialConditionBase;
     };
 }
 

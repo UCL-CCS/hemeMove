@@ -8,22 +8,16 @@
 
 #include "net/IOCommunicator.h"
 
-namespace hemelb
+namespace hemelb::tests::helpers
 {
-  namespace tests
-  {
-    namespace helpers
+    class HasCommsTestFixture
     {
-      class HasCommsTestFixture
-      {
-      private:
-	static const net::IOCommunicator* hemelbCommunicator;
-      public:
-	static void Init(const net::IOCommunicator& inst);
-      protected:
-	static const net::IOCommunicator& Comms();
-      };
-    }
-  }
+    private:
+        static net::IOCommunicator const* hemelbCommunicator;
+    public:
+        static void Init(const net::IOCommunicator& inst);
+    protected:
+        static const net::IOCommunicator& Comms();
+    };
 }
 #endif // HEMELB_TESTS_HELPERS_HASCOMMSTESTFIXTURE_H

@@ -7,6 +7,7 @@
 #define HEMELB_IO_WRITERS_WRITER_H
 
 #include <cstdint>
+#include <span>
 #include <string>
 
 #include "util/Vector3D.h"
@@ -64,6 +65,7 @@ namespace hemelb::io
           virtual void _write(float const& floatToWrite) = 0;
 
           virtual void _write(const std::string& floatToWrite) = 0;
+          virtual void _write(std::span<const std::byte>) = 0;
       };
 
 }

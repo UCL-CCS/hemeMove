@@ -43,14 +43,14 @@ namespace hemelb
 	}
 
       auto const cell = inserter.drop();
-      auto const barycenter = cell->GetBarycenter();
+      auto const barycentre = cell->GetBarycentre();
 
       const double p = world.Size();
-      auto const x_times_p = world.AllReduce(barycenter.x(), MPI_SUM);
-      auto const y_times_p = world.AllReduce(barycenter.y(), MPI_SUM);
-      auto const z_times_p = world.AllReduce(barycenter.z(), MPI_SUM);
-      auto const mean_barycenter = LatticePosition{x_times_p, y_times_p, z_times_p} / p;
-      REQUIRE(barycenter == mean_barycenter);
+      auto const x_times_p = world.AllReduce(barycentre.x(), MPI_SUM);
+      auto const y_times_p = world.AllReduce(barycentre.y(), MPI_SUM);
+      auto const z_times_p = world.AllReduce(barycentre.z(), MPI_SUM);
+      auto const mean_barycentre = LatticePosition{x_times_p, y_times_p, z_times_p} / p;
+      REQUIRE(barycentre == mean_barycentre);
     }
   }
 }

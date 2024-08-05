@@ -8,7 +8,7 @@
 
 #include "configuration/CommandLine.h"
 #include "debug.h"
-#include "multiscale/MultiscaleSimulationMaster.h"
+#include "multiscale/MultiscaleSimulationController.h"
 #include "multiscale/mpwide/MPWideIntercommunicator.h"
 
 int main(int argc, char *argv[])
@@ -55,13 +55,13 @@ int main(int argc, char *argv[])
                                                              mpwideConfigDir.append("MPWSettings.cfg"));
 
       //TODO: Add an IntercommunicatorImplementation?
-      hemelb::log::Logger::Log<hemelb::log::Info, hemelb::log::OnePerCore>("Constructing MultiscaleSimulationMaster()");
-      hemelb::multiscale::MultiscaleSimulationMaster<hemelb::multiscale::MPWideIntercommunicator> lMaster(options,
+      hemelb::log::Logger::Log<hemelb::log::Info, hemelb::log::OnePerCore>("Constructing MultiscaleSimulationController()");
+      hemelb::multiscale::MultiscaleSimulationController<hemelb::multiscale::MPWideIntercommunicator> lController(options,
 													  hemelbCommunicator,
                                                                                                           intercomms);
 
       hemelb::log::Logger::Log<hemelb::log::Info, hemelb::log::OnePerCore>("Runing simulation()");
-      lMaster.RunSimulation();
+      lController.RunSimulation();
     }
     // Interpose this catch to print usage before propagating the error.
     catch (hemelb::configuration::CommandLine::OptionError& e)

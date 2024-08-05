@@ -28,7 +28,7 @@ namespace hemelb::geometry::decomposition
         procForBlockOct(geometry.block_store->GetBlockOwnerRank()),
         fluidSitesPerBlockOct(tree.levels.back().sites_per_node)
     {
-        timers[reporting::Timers::InitialGeometryRead].Start(); //overall dbg timing
+        timers.InitialGeometryRead().Start(); //overall dbg timing
 
         // Calculate the site distribution and validate if appropriate.
         PopulateSiteDistribution();
@@ -49,22 +49,22 @@ namespace hemelb::geometry::decomposition
 
         log::Logger::Log<log::Trace, log::OnePerCore>("Adj length %i", localAdjacencies.size());
 
-        timers[reporting::Timers::InitialGeometryRead].Stop();
+        timers.InitialGeometryRead().Stop();
 
         // Call parmetis.
-        timers[reporting::Timers::parmetis].Start();
+        timers.parmetis().Start();
         log::Logger::Log<log::Debug, log::OnePerCore>("Making the call to Parmetis");
         CallParmetis(localVertexCount);
-        timers[reporting::Timers::parmetis].Stop();
+        timers.parmetis().Stop();
         log::Logger::Log<log::Debug, log::OnePerCore>("Parmetis has finished.");
 
         // Now each process knows which rank all its sites belong
         // on. Tell the destination ranks which sites they need.
-        timers[reporting::Timers::PopulateOptimisationMovesList].Start();
+        timers.PopulateOptimisationMovesList().Start();
         log::Logger::Log<log::Debug, log::OnePerCore>("Getting moves lists for this core.");
         PopulateMovesList();
         log::Logger::Log<log::Debug, log::OnePerCore>("Done getting moves lists for this core");
-        timers[reporting::Timers::PopulateOptimisationMovesList].Stop();
+        timers.PopulateOptimisationMovesList().Stop();
     }
 
       void OptimisedDecomposition::CallParmetis(idx_t localVertexCount)

@@ -15,12 +15,11 @@
 class vtkPolyData;
 template <class> class vtkSmartPointer;
 
-namespace hemelb {
-  namespace util {
+namespace hemelb::util {
     class UnitConverter;
-  }
+}
 
-  namespace redblood {
+namespace hemelb::redblood {
     class CellBase;
     class Cell;
 
@@ -36,14 +35,17 @@ namespace hemelb {
       using ScalarField = std::pair<std::string, std::vector<double>>;
       using PointScalarData = std::vector<ScalarField>;
 
+      // For UnitConverter arguments, use nullptr (i.e. absent) to
+      // indicate I/O in lattice units.
+
       // Where are we writing to?
       enum class Storage {file, string};
 
       virtual ~MeshIO() = default;
 
       // Read mesh from file or string.
-      MeshPtr readFile(std::string const &filename, bool fixFacetOrientation) const;
-      MeshPtr readString(std::string const &data, bool fixFacetOrientation) const;
+      [[nodiscard]] MeshPtr readFile(std::string const &filename, bool fixFacetOrientation) const;
+      [[nodiscard]] MeshPtr readString(std::string const &data, bool fixFacetOrientation) const;
 
       // Overload set to write mesh to a file in physical units.
       // First arg: file name
@@ -52,54 +54,55 @@ namespace hemelb {
       // Fourth/Fifth arg: optional scalar data to attach to the points
       void writeFile(std::string const &filename,
 		     MeshData const& mesh,
-		     util::UnitConverter const &,
+		     util::UnitConverter const*,
 		     PointScalarData const& data = {}) const;
       void writeFile(std::string const &filename,
 		     MeshData::Vertices const &, MeshData::Facets const &,
-		     util::UnitConverter const &,
+		     util::UnitConverter const*,
 		     PointScalarData const& data = {}) const;
       // Overload set to write mesh to a string in physical units (return value).
       // Mesh as above
       // Unit converter
       // Optional scalar data
-      std::string writeString(MeshData const& mesh,
-			      util::UnitConverter const &,
+      [[nodiscard]] std::string writeString(MeshData const& mesh,
+			      util::UnitConverter const*,
 			      PointScalarData const& data = {}) const;
-      std::string writeString(MeshData::Vertices const &, MeshData::Facets const &,
-			      util::UnitConverter const &,
+      [[nodiscard]] std::string writeString(MeshData::Vertices const &, MeshData::Facets const &,
+			      util::UnitConverter const*,
 			      PointScalarData const& data = {}) const;
 
       //! Write cell-mesh to file or string
-      void writeFile(std::string const& filename, CellBase const&, util::UnitConverter const&) const;
-      std::string writeString(CellBase const&, util::UnitConverter const&) const;
+      void writeFile(std::string const& filename, CellBase const&, util::UnitConverter const*) const;
+      [[nodiscard]] std::string writeString(CellBase const&, util::UnitConverter const*) const;
 
       //! Write cell-mesh including individual forces to file or string
-      void writeFile(std::string const& filename, Cell const&, util::UnitConverter const&) const;
-      std::string writeString(Cell const&, util::UnitConverter const&) const;
+      void writeFile(std::string const& filename, Cell const&, util::UnitConverter const*) const;
+      std::string writeString(Cell const&, util::UnitConverter const*) const;
 
     private:
       // Derived class implement these to actually do the serialisation.
-      virtual MeshPtr read(Storage,
+      [[nodiscard]] virtual MeshPtr read(Storage,
                            std::string const& filename_or_data,
                            bool fixFacetOrientation) const = 0;
+      // Discard is fine iff storage is file
       virtual std::string write(Storage m, std::string const& filename,
                                 MeshData::Vertices const &, MeshData::Facets const &,
-                                util::UnitConverter const& c, PointScalarData const& data) const = 0;
+                                util::UnitConverter const* c, PointScalarData const& data) const = 0;
     };
 
     // Format is from T. Krueger's thesis
     class KruegerMeshIO : public MeshIO {
     public:
-      ~KruegerMeshIO() = default;
+      ~KruegerMeshIO() override = default;
 
-      MeshPtr read(Storage,
+      [[nodiscard]] MeshPtr read(Storage,
                    std::string const &filename_or_data,
                    bool fixFacetOrientation) const override;
 
       std::string write(Storage m,
                         std::string const &filename,
                         MeshData::Vertices const &, MeshData::Facets const &,
-                        util::UnitConverter const& c,
+                        util::UnitConverter const* c,
                         PointScalarData const& data) const override;
     };
 
@@ -108,22 +111,21 @@ namespace hemelb {
     public:
       using PolyDataPtr = vtkSmartPointer<vtkPolyData>;
       // Helper member function, exposed to allow testing of the fix orientations
-      std::tuple<MeshPtr, PolyDataPtr> readUnoriented(Storage, std::string const &) const;
+      [[nodiscard]] std::tuple<MeshPtr, PolyDataPtr> readUnoriented(Storage, std::string const &) const;
 
-      ~VTKMeshIO() = default;
+      ~VTKMeshIO() override = default;
 
-      MeshPtr read(Storage,
+      [[nodiscard]] MeshPtr read(Storage,
                    std::string const &filename_or_data,
                    bool fixFacetOrientation) const override;
 
       std::string write(Storage m,
                         std::string const &filename,
                         MeshData::Vertices const &, MeshData::Facets const &,
-                        util::UnitConverter const& c,
+                        util::UnitConverter const* c,
                         PointScalarData const& data) const override;
 
     };
 
-  }
 }
 #endif

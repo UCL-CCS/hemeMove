@@ -4,7 +4,7 @@
 // license in the file LICENSE.
 
 #include "lb/kernels/CassonRheologyModel.h"
-#include "util/utilityFunctions.h"
+#include "util/numerical.h"
 #include <cmath>
 
 namespace hemelb::lb
@@ -16,6 +16,6 @@ namespace hemelb::lb
         double eta = (k0_k1_gamma * k0_k1_gamma) / iShearRate;
 
         // In the Casson rheology model, viscosity tends to infinity as shear rate goes to zero. Bound it.
-        return util::NumericalFunctions::min(eta, CASSON_MAX_VISCOSITY);
+        return std::min(eta, CASSON_MAX_VISCOSITY);
     }
 }

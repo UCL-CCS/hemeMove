@@ -4,6 +4,7 @@
 // license in the file LICENSE.
 
 #include "extraction/LbDataSourceIterator.h"
+#include "geometry/FieldData.h"
 
 namespace hemelb::extraction
 {
@@ -33,44 +34,42 @@ namespace hemelb::extraction
 
     FloatingType LbDataSourceIterator::GetPressure() const
     {
-      return converter->ConvertPressureToPhysicalUnits(propertyCache.densityCache.Get(position)
-          * Cs2);
+      return Cs2 * (propertyCache.densityCache.Get(position) - 1);
     }
 
     util::Vector3D<FloatingType> LbDataSourceIterator::GetVelocity() const
     {
-      return converter->ConvertVelocityToPhysicalUnits(propertyCache.velocityCache.Get(position).as<float>());
+      return propertyCache.velocityCache.Get(position).as<float>();
     }
 
     FloatingType LbDataSourceIterator::GetShearStress() const
     {
-      return converter->ConvertStressToPhysicalUnits(propertyCache.wallShearStressMagnitudeCache.Get(position));
+      return propertyCache.wallShearStressMagnitudeCache.Get(position);
     }
 
     FloatingType LbDataSourceIterator::GetVonMisesStress() const
     {
-      return converter->ConvertStressToPhysicalUnits(propertyCache.vonMisesStressCache.Get(position));
+      return propertyCache.vonMisesStressCache.Get(position);
     }
 
     FloatingType LbDataSourceIterator::GetShearRate() const
     {
-      return converter->ConvertShearRateToPhysicalUnits(propertyCache.shearRateCache.Get(position));
+      return propertyCache.shearRateCache.Get(position);
     }
 
     util::Matrix3D LbDataSourceIterator::GetStressTensor() const
     {
-      return converter->ConvertFullStressTensorToPhysicalUnits(propertyCache.stressTensorCache.Get(position));
+      return propertyCache.stressTensorCache.Get(position);
     }
 
     util::Vector3D<PhysicalStress> LbDataSourceIterator::GetTraction() const
     {
-      return converter->ConvertTractionToPhysicalUnits(propertyCache.tractionCache.Get(position),
-                                                      data.GetSite(position).GetWallNormal());
+      return propertyCache.tractionCache.Get(position);
     }
 
     util::Vector3D<PhysicalStress> LbDataSourceIterator::GetTangentialProjectionTraction() const
     {
-      return converter->ConvertStressToPhysicalUnits(propertyCache.tangentialProjectionTractionCache.Get(position));
+      return propertyCache.tangentialProjectionTractionCache.Get(position);
     }
 
     const distribn_t* LbDataSourceIterator::GetDistribution() const
@@ -99,9 +98,21 @@ namespace hemelb::extraction
       return converter->GetVoxelSize();
     }
 
+    PhysicalTime LbDataSourceIterator::GetTimeStep() const {
+        return converter->GetTimeStep();
+    }
+
+    PhysicalMass LbDataSourceIterator::GetMassScale() const {
+        return converter->GetMassScale();
+    }
+
     const PhysicalPosition& LbDataSourceIterator::GetOrigin() const
     {
       return converter->GetLatticeOrigin();
+    }
+
+    PhysicalPressure LbDataSourceIterator::GetReferencePressure() const {
+        return converter->GetReferencePressure();
     }
 
     bool LbDataSourceIterator::IsWallSite(const util::Vector3D<site_t>& location) const

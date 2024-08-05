@@ -18,7 +18,7 @@ namespace hemelb::io
     return fh.tell();
   }
 
-  const char* XdrFileReader::get_bytes(size_t n) {
+  const std::byte* XdrFileReader::get_bytes(size_t n) {
     buf.clear();
     buf.resize(n);
     auto nread = fh.read(buf.data(), 1, n);

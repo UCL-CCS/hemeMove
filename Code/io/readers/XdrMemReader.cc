@@ -9,12 +9,12 @@
 namespace hemelb::io
 {
   // Constructor to create an Xdr object based on a memory buffer
-  XdrMemReader::XdrMemReader(const char* buf, unsigned int dataLength)
+  XdrMemReader::XdrMemReader(const std::byte* buf, unsigned int dataLength)
     : start(buf), current(buf), len(dataLength)
   {
   }
 
-  XdrMemReader::XdrMemReader(const std::vector<char>& dataVec)
+  XdrMemReader::XdrMemReader(const std::vector<std::byte>& dataVec)
     : start(dataVec.data()), current(start), len(dataVec.size())
   {
   }
@@ -23,7 +23,7 @@ namespace hemelb::io
     return current - start;
   }
 
-  const char* XdrMemReader::get_bytes(size_t n) {
+  const std::byte* XdrMemReader::get_bytes(size_t n) {
     HASSERT(GetPosition() + n <= len);
     auto ans = current;
     current += n;

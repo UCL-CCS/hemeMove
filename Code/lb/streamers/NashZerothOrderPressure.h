@@ -6,7 +6,7 @@
 #define HEMELB_LB_STREAMERS_NASHZEROTHORDERPRESSURE_H
 
 #include "lb/concepts.h"
-#include "util/utilityFunctions.h"
+#include "util/numerical.h"
 
 namespace hemelb::lb
 {

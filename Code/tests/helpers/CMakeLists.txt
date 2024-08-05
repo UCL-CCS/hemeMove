@@ -14,4 +14,4 @@ add_test_lib(test-helpers
   RandomSourceTests.cc
   RecordingNet.cc
 )
-target_link_libraries(test-helpers PRIVATE TinyXML::TinyXML)
+target_link_libraries(test-helpers PRIVATE tinyxml2::tinyxml2)

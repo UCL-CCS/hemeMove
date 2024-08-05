@@ -5,8 +5,9 @@
 
 #include "lb/InitialCondition.h"
 
-namespace hemelb {
-  namespace lb {
+#include "lb/SimulationState.h"
+
+namespace hemelb::lb {
 
     // InitialConditionBase
     
@@ -14,10 +15,10 @@ namespace hemelb {
     }
     InitialConditionBase::InitialConditionBase(std::optional<LatticeTimeStep> t) : initial_time(t) {
     }
-    
+
     void InitialConditionBase::SetTime(SimulationState* sim) const {
-      if (initial_time)
-	sim->timeStep = *initial_time;
+        if (initial_time)
+            sim->timeStep = *initial_time;
     }
 
 
@@ -45,20 +46,17 @@ namespace hemelb {
 
     // Visitor for setting time
     struct TSetter {
-      using result_type = void;
-      template <typename T>
-      void operator()(T t) const {
-	t.SetTime(ss);
-      }
-      SimulationState* ss;
+        using result_type = void;
+        template <typename T>
+        void operator()(T t) const {
+            t.SetTime(ss);
+        }
+        SimulationState* ss;
     };
     void InitialCondition::SetTime(SimulationState* sim) const {
-      const ICVar* self = this;
-      std::visit(TSetter{sim}, *self);
+        const ICVar* self = this;
+        std::visit(TSetter{sim}, *self);
     }
 
     // See InitialCondtions.hpp for setting Fs (distributions)
-
-
-  }
 }

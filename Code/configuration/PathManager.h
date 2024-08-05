@@ -3,28 +3,17 @@
 // file AUTHORS. This software is provided under the terms of the
 // license in the file LICENSE.
 
-#ifndef HEMELB_IO_PATHMANAGER_H
-#define HEMELB_IO_PATHMANAGER_H
+#ifndef HEMELB_CONFIGURATION_PATHMANAGER_H
+#define HEMELB_CONFIGURATION_PATHMANAGER_H
 
 #include <filesystem>
 #include <string>
 #include "log/Logger.h"
 
-namespace hemelb
+namespace hemelb::configuration
 {
-  namespace configuration
-  {
     class CommandLine;
     class SimConfig;
-  }
-
-  namespace io
-  {
-    // Forward declare the Writer
-    namespace writers
-    {
-      class Writer;
-    }
 
     /**
      * Manage the input and output file system locations for HemeLB reports, extracted data, and input xml.
@@ -65,23 +54,26 @@ namespace hemelb
          */
         [[nodiscard]] const path& GetDataExtractionPath() const;
 
+        [[nodiscard]] const path& GetCheckpointPath() const;
+
         /**
          * Create a subdirectory inside the RBC output directory and return its path
          * @param subdirectoryName Name of the subdirectory to be created
          * @return Path to the newly created subdirectory
          */
-        [[nodiscard]] path GetRBCOutputPathWithSubdir(std::string const& subdirectoryName) const;
+        [[nodiscard]] path GetRBCOutputPathWithSubdir(std::string const& subdirectoryName, bool create, bool allow_existing) const;
 
       private:
         path outputDir;
         path inputFile;
         path colloidFile;
         path extractionDir;
+        path cpDir;
         const configuration::CommandLine &options;
         bool doIo; //! Am I the input/output node?
         path rbcDir; //! Path for RBC output
     };
-  }
+
 }
 
-#endif //HEMELB_IO_PATHMANAGER_H
+#endif //HEMELB_CONFIGURATION_PATHMANAGER_H

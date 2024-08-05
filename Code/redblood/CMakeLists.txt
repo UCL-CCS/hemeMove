@@ -42,6 +42,7 @@ if (HEMELB_BUILD_RBC)
   add_library(hemelb_redblood OBJECT
     CellControllerBuilder.cc
     Mesh.cc MeshIO.cc
+    CellIO.cc
     CellBase.cc Cell.cc CellEnergy.cc Facet.cc
     Interpolation.cc
     CellCell.cc FlowExtension.cc FaderCell.cc RBCInserter.cc

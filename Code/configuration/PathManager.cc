@@ -3,13 +3,13 @@
 // file AUTHORS. This software is provided under the terms of the
 // license in the file LICENSE.
 
-#include "io/PathManager.h"
+#include "configuration/PathManager.h"
 
 #include "Exception.h"
 #include "configuration/CommandLine.h"
 
 namespace fs = std::filesystem;
-namespace hemelb::io
+namespace hemelb::configuration
 {
 
     PathManager::PathManager(const configuration::CommandLine & commandLine, const bool & io,
@@ -22,6 +22,7 @@ namespace hemelb::io
         extractionDir = outputDir / "Extracted";
         colloidFile = outputDir / "ColloidOutput.xdr";
         rbcDir = outputDir / "Cells";
+        cpDir = outputDir / "Checkpoints";
 
         if (doIo)
         {
@@ -31,6 +32,7 @@ namespace hemelb::io
             fs::create_directory(outputDir);
             fs::create_directory(extractionDir);
             fs::create_directory(rbcDir);
+            fs::create_directory(cpDir);
         }
     }
 
@@ -52,26 +54,29 @@ namespace hemelb::io
       return extractionDir;
     }
 
-    fs::path PathManager::GetRBCOutputPathWithSubdir(std::string const& subdirectoryName) const
+    const fs::path& PathManager::GetCheckpointPath() const
     {
-      auto rbcSubdir = rbcDir / subdirectoryName;
+        return cpDir;
+    }
 
-      if (doIo)
-      {
-        if (fs::exists(rbcSubdir))
-          throw Exception() << "Output directory '" << rbcSubdir << "' already exists.";
+    fs::path PathManager::GetRBCOutputPathWithSubdir(std::string const& subdirectoryName, bool create, bool allow_existing) const
+    {
+        auto rbcSubdir = rbcDir / subdirectoryName;
+        if (doIo) {
+            bool does_exist = fs::exists(rbcSubdir);
+            if (create) {
+                if (does_exist && !allow_existing)
+                    throw Exception() << "Output directory '" << rbcSubdir << "' already exists.";
 
-        std::error_code ec;
-        if (!fs::create_directory(rbcSubdir, rbcDir, ec))
-        if (ec)
-        {
-          throw Exception() << "Output directory '" << rbcSubdir << "' could not be created because: "
-                            << ec.message();
+                std::error_code ec;
+                if (!fs::create_directory(rbcSubdir, rbcDir, ec))
+                    if (ec) {
+                        throw Exception() << "Output directory '" << rbcSubdir << "' could not be created because: "
+                                          << ec.message();
+                    }
+            }
         }
-      }
-
-      return rbcSubdir;
+        return rbcSubdir;
     }
 
 }
-

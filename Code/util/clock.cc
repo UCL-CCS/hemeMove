@@ -3,15 +3,14 @@
 // file AUTHORS. This software is provided under the terms of the
 // license in the file LICENSE.
 
-#include "io/formats/geometry.h"
+#include "util/clock.h"
+#include <mpi.h>
 
-namespace hemelb
+namespace hemelb::util
 {
-  namespace io
-  {
-    namespace formats
-    {
-      constexpr geometry::DisplacementArray geometry::Neighbourhood;
+    // Returns the number of seconds to 6dp elapsed since the Epoch
+    double clock() {
+        return MPI_Wtime();
     }
-  }
+
 }

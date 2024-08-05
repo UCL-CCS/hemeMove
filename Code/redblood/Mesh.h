@@ -46,13 +46,13 @@ namespace hemelb::redblood
         "Explicit type characteristics"
     );
 
-    LatticePosition barycenter(MeshData const &mesh);
-    LatticePosition barycenter(MeshData::Vertices const &vertices);
+    LatticePosition barycentre(MeshData const &mesh);
+    LatticePosition barycentre(MeshData::Vertices const &vertices);
     LatticeVolume volume(MeshData const &mesh);
     LatticeVolume volume(MeshData::Vertices const &vertices, MeshData::Facets const &facets);
     LatticeArea area(MeshData const &mesh);
     LatticeArea area(MeshData::Vertices const &vertices, MeshData::Facets const &facets);
-    //! DEPRECATED. Orients facets outward, or inward. Algorithm cannot handle case of facet being coplanar with mesh barycenter.
+    //! DEPRECATED. Orients facets outward, or inward. Algorithm cannot handle case of facet being coplanar with mesh barycentre.
     unsigned orientFacets(MeshData &mesh, bool outward = true);
     //! Orients facets inwards/outwards using VTK algorithm to determining outward facing direction. MeshData object should have been constructed from vtkPolyData object. See readMeshDataFromVTKPolyData.
     unsigned orientFacets(MeshData &mesh, vtkPolyData &polydata, bool outward = true);
@@ -126,10 +126,10 @@ namespace hemelb::redblood
         {
         }
 
-        //! Determines barycenter of mesh
-        LatticePosition GetBarycenter() const
+        //! Determines barycentre of mesh
+        LatticePosition GetBarycentre() const
         {
-          return barycenter(*mesh);
+          return barycentre(*mesh);
         }
         //! Computes volume of the mesh
         LatticeVolume GetVolume() const
@@ -168,9 +168,9 @@ namespace hemelb::redblood
           return Mesh(*this, deepcopy_tag());
         }
 
-        //! Scale mesh around barycenter
+        //! Scale mesh around barycentre
         void operator*=(Dimensionless const &scale);
-        //! Scale by matrix around barycenter
+        //! Scale by matrix around barycentre
         void operator*=(util::Matrix3D const &rotation);
         //! Translate mesh
         void operator+=(LatticePosition const &offset);

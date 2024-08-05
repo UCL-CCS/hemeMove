@@ -22,11 +22,11 @@ namespace hemelb::io
     ~XdrFileReader() override = default;
     unsigned GetPosition() override;
   protected:
-    const char* get_bytes(size_t n) override;
+    const std::byte* get_bytes(size_t n) override;
   private:
     FILE fh;
     // Buffer for holding read data
-    std::vector<char> buf;
+    std::vector<std::byte> buf;
   };
 
 }

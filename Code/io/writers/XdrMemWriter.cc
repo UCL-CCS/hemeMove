@@ -8,8 +8,8 @@
 namespace hemelb::io
 {
 
-    XdrMemWriter::XdrMemWriter(char* dataBuffer, unsigned int dataLength) :
-            XdrMetaWriter<char*>(dataBuffer, dataBuffer + dataLength)
+    XdrMemWriter::XdrMemWriter(std::byte* dataBuffer, unsigned int dataLength) :
+            XdrMetaWriter<std::byte*>(dataBuffer, dataBuffer + dataLength)
     {
     }
 

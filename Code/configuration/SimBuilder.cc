@@ -8,8 +8,10 @@
 #include <algorithm>
 #include <ranges>
 
+#include "extraction/GeometrySelectors.h"
 #include "geometry/GeometryReader.h"
 #include "lb/InitialCondition.h"
+#include "lb/iolets/InOutLets.h"
 #include "redblood/FlowExtension.h"
 #include "reporting/Reporter.h"
 #include "util/variant.h"
@@ -20,7 +22,7 @@ namespace hemelb::configuration {
         return std::make_shared<util::UnitConverter>(
             info.time.step_s,
             info.space.step_m, info.space.geometry_origin_m,
-            info.fluid.density_kgm3, info.fluid.reference_pressure_mmHg
+            info.fluid.density_kgm3, info.fluid.reference_pressure_Pa
         );
     }
 
@@ -49,7 +51,6 @@ namespace hemelb::configuration {
     lb::LbmParameters SimBuilder::BuildLbmParams() const {
         auto&& i = config.sim_info;
         lb::LbmParameters ans(i.time.step_s, i.space.step_m, i.fluid.density_kgm3, i.fluid.viscosity_Pas);
-        ans.StressType = i.stress_type;
         return ans;
     }
 
@@ -64,7 +65,7 @@ namespace hemelb::configuration {
         }
 
         result_type operator()(const configuration::EquilibriumIC& cfg) const {
-            auto rho = units.ConvertPressureToLatticeUnits(cfg.p_mmHg) / Cs2;
+            auto rho = units.ConvertPressureToLatticeUnits(cfg.p_Pa) / Cs2;
             return lb::EquilibriumInitialCondition{cfg.t0, rho};
         }
         result_type operator()(const configuration::CheckpointIC& cfg) const {
@@ -104,9 +105,9 @@ namespace hemelb::configuration {
         BuildBaseIolet(ic, ans.get());
 
         // Amplitude is a pressure DIFFERENCE (no use of REFERENCE_PRESSURE)
-        ans->SetPressureAmp(unit_converter->ConvertPressureDifferenceToLatticeUnits(ic.amp_mmHg));
+        ans->SetPressureAmp(unit_converter->ConvertPressureDifferenceToLatticeUnits(ic.amp_Pa));
         // Mean is an absolute pressure
-        ans->SetPressureMean(unit_converter->ConvertPressureToLatticeUnits(ic.mean_mmHg));
+        ans->SetPressureMean(unit_converter->ConvertPressureToLatticeUnits(ic.mean_Pa));
         ans->SetPhase(ic.phase_rad);
         ans->SetPeriod(unit_converter->ConvertTimeToLatticeUnits(ic.period_s));
         return ans;
@@ -122,7 +123,7 @@ namespace hemelb::configuration {
     auto SimBuilder::BuildMultiscalePressureIolet(const MultiscalePressureIoletConfig & ic) const -> IoletPtr {
         auto ans = util::make_clone_ptr<lb::InOutLetMultiscale>();
         BuildBaseIolet(ic, ans.get());
-        ans->GetPressureReference() = ic.pressure_reference_mmHg;
+        ans->GetPressureReference() = ic.pressure_reference_Pa;
         ans->GetVelocityReference() = ic.velocity_reference_ms;
         ans->GetLabel() = ic.label;
         return ans;
@@ -140,7 +141,7 @@ namespace hemelb::configuration {
         auto ans = util::make_clone_ptr<lb::InOutLetWomersleyVelocity>();
         BuildBaseIolet(ic, ans.get());
         ans->SetRadius(unit_converter->ConvertDistanceToLatticeUnits(ic.radius_m));
-        ans->SetPressureGradientAmplitude(unit_converter->ConvertPressureGradientToLatticeUnits(ic.pgrad_amp_mmHgm));
+        ans->SetPressureGradientAmplitude(unit_converter->ConvertPressureGradientToLatticeUnits(ic.pgrad_amp_Pam));
         ans->SetPeriod(unit_converter->ConvertTimeToLatticeUnits(ic.period_s));
         ans->SetWomersleyNumber(ic.womersley);
         return ans;
@@ -225,8 +226,8 @@ namespace hemelb::configuration {
 
     std::shared_ptr<extraction::PropertyActor> SimBuilder::BuildPropertyExtraction(
             std::filesystem::path const& xtr_path,
-            const lb::SimulationState& simState,
-            extraction::IterableDataSource& dataSource,
+            std::shared_ptr<lb::SimulationState const> simState,
+            std::shared_ptr<extraction::IterableDataSource> dataSource,
             reporting::Timers& timings,
             const net::IOCommunicator& ioComms
     ) const {
@@ -245,9 +246,52 @@ namespace hemelb::configuration {
                 ioComms
         );
     }
+    std::shared_ptr<io::Checkpointer> SimBuilder::BuildCheckpointer(
+            std::filesystem::path const& cp_path,
+            std::shared_ptr<lb::SimulationState const> simState,
+            std::shared_ptr<extraction::IterableDataSource> dataSource,
+            reporting::Timers& timings,
+            const net::IOCommunicator& ioComms
+    ) const {
+        if (!config.sim_info.checkpoint.has_value())
+            return nullptr;
+
+        auto& cp_info = *config.sim_info.checkpoint;
+
+        auto cp_dir_pattern = cp_path / "%d";
+        auto dist_pattern = cp_dir_pattern / "distributions.xtr";
+
+        // Create a checkpoint property extractor.
+        //
+        // This is just a normal one, but fixed to be whole geometry,
+        // only distributions, at double precision.
+        auto lpo = [&]() {
+            using namespace extraction;
+            auto file = PropertyOutputFile{
+                    .filename = cp_dir_pattern / "distributions.xtr",
+                    .frequency = cp_info.period,
+                    .geometry = util::make_clone_ptr<WholeGeometrySelector>(),
+                    .fields = {
+                            OutputField{
+                                    .name = "distributions",
+                                    .src = source::Distributions{},
+                                    .typecode = distribn_t{0},
+                                    .noffsets = 0,
+                                    .offset = {},
+                            }
+                    },
+                    .ts_mode = single_timestep_files{}
+            };
+            return std::make_unique<LocalPropertyOutput>(dataSource, file, ioComms);
+        }();
+
+        return std::make_shared<io::Checkpointer>(
+                cp_info.period, cp_dir_pattern.native(), std::move(simState), std::move(lpo)
+        );
+    }
 
     std::shared_ptr<reporting::Reporter> SimBuilder::BuildReporter(
-            io::PathManager const& fileManager,
+            PathManager const& fileManager,
             std::vector<reporting::Reportable*>const& reps
     ) const {
         auto reporter = std::make_shared<reporting::Reporter>(fileManager.GetReportPath(),

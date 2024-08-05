@@ -61,11 +61,11 @@ namespace hemelb::net
 }
 
 // Macro version of the above - deprecated
-#define HEMELB_MPI_CALL( mpiFunc, args ) \
+#define HEMELB_MPI_CALL( mpiFunc, args ) do \
 { \
   int _check_result = mpiFunc args; \
   if (_check_result != MPI_SUCCESS) \
     throw ::hemelb::net::MpiError(#mpiFunc, _check_result, __FILE__, __LINE__); \
-}
+} while(0)
 
 #endif // HEMELB_NET_MPIERROR_H

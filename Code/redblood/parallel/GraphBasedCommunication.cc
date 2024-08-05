@@ -4,6 +4,7 @@
 // license in the file LICENSE.
 #include "redblood/parallel/GraphBasedCommunication.h"
 
+#include "log/Logger.h"
 #include "net/MpiCommunicator.h"
 #include "net/SparseExchange.h"
 #include "reporting/Timers.h"
@@ -82,8 +83,7 @@ namespace hemelb::redblood::parallel
         auto rank = comm.Rank();
 
         // Loop over this process's edge
-        auto first_edge_site_i = domain.GetMidDomainSiteCount();
-        auto last_edge_site_i = first_edge_site_i + domain.GetDomainEdgeSiteCount();
+        auto [first_edge_site_i, last_edge_site_i] = domain.GetAllDomainEdgeSiteRange();
         for (auto siteIndex = first_edge_site_i;
              siteIndex < last_edge_site_i;
              ++siteIndex) {
@@ -193,14 +193,14 @@ namespace hemelb::redblood::parallel
                                          std::shared_ptr<TemplateCellContainer> const& cellTemplates,
                                          hemelb::reporting::Timers &timings)
     {
-        timings[hemelb::reporting::Timers::graphComm].Start();
+        timings.graphComm().Start();
         auto ranks_i_may_communicate_with = ComputeProcessorNeighbourhood(comm,
                                                                           domain,
                                                                           ComputeCellsEffectiveSize(*cellTemplates));
         check_neighbourhood_consistency(comm, ranks_i_may_communicate_with);
         log::Logger::Log<log::Info, log::Singleton>("Create the graph communicator");
         auto graphComm = comm.DistGraphAdjacent(ranks_i_may_communicate_with);
-        timings[hemelb::reporting::Timers::graphComm].Stop();
+        timings.graphComm().Stop();
 
         return graphComm;
     }

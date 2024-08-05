@@ -313,6 +313,7 @@ namespace hemelb::tests
             // Same for forces
             LatticeVector const position(2, 2, 2);
             auto&& site = latDat->GetSite(position);
+            auto i_site = site.GetIndex();
             helpers::allZeroButOne<LatticeType>(*latDat, position);
 
             // Get collided distributions at this site
@@ -325,7 +326,7 @@ namespace hemelb::tests
             // Stream that site
             using lb::BulkStreamer;
             BulkStreamer<Collision> streamer(initParams);
-            streamer.StreamAndCollide(site.GetIndex(), 1, &lbmParams, *latDat, *propertyCache);
+            streamer.StreamAndCollide(i_site, i_site + 1, &lbmParams, *latDat, *propertyCache);
 
             // Now check streaming worked correctly
             for (size_t i(0); i < LatticeType::NUMVECTORS; ++i) {
@@ -342,6 +343,7 @@ namespace hemelb::tests
             // Same for forces
             LatticeVector const position(1, 1, 1);
             auto&& site = latDat->GetSite(position);
+            auto i_site = site.GetIndex();
             helpers::allZeroButOne<LatticeType>(*latDat, position);
 
             // Get collided distributions at this site
@@ -357,10 +359,10 @@ namespace hemelb::tests
                     lb::NullLink<Collision>
             >;
             SBB streamer(initParams);
-            streamer.StreamAndCollide(site.GetIndex(), 1, &lbmParams, *latDat, *propertyCache);
+            streamer.StreamAndCollide(i_site, i_site + 1, &lbmParams, *latDat, *propertyCache);
 
             distribn_t const * const actual = helpers::GetFNew<LatticeType>(*latDat, position);
-            bool paranoia(false);
+            bool paranoia = false;
             for (size_t i(0); i < LatticeType::NUMVECTORS; ++i) {
                 if (not site.HasWall(i))
                     continue;

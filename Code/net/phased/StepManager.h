@@ -28,7 +28,7 @@ namespace hemelb
        * This provides a mechanism to allow concerns to schedule there activities
        * during and between each of the steps of an asynchronous communication pattern
        * There may be several sequences of asynchronous communication during a single
-       * iteration of the SimulationMaster, by registering several phases, each with
+       * iteration of the SimulationController, by registering several phases, each with
        * it's own pre/post send-receive steps, etc.
        */
       class StepManager

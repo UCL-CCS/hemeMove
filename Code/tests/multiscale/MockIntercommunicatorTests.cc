@@ -8,7 +8,7 @@
 #include <catch2/catch.hpp>
 
 #include "resources/Resource.h"
-#include "multiscale/MultiscaleSimulationMaster.h"
+#include "multiscale/MultiscaleSimulationController.h"
 
 #include "tests/helpers/LaddFail.h"
 #include "tests/helpers/FolderTestFixture.h"
@@ -147,7 +147,7 @@ namespace hemelb::tests
 
     TEST_CASE_METHOD(public helpers::FolderTestFixture, "MockIntercommunicatorTests") {
         MockHemeLB<MockIntercommunicator> *mockheme;
-        MultiscaleSimulationMaster<MockIntercommunicator> *heme;
+        MultiscaleSimulationController<MockIntercommunicator> *heme;
         Mock0DModel<MockIntercommunicator> *zerod;
         std::map<std::string, double> *pbuffer;
         std::map<std::string, bool> *orchestrationLB;
@@ -203,10 +203,10 @@ namespace hemelb::tests
             CopyResourceToTempdir("four_cube.gmy");
             configuration::CommandLine options(argc, argv);
             MockIntercommunicator intercomms(*pbuffer, *orchestrationLB);
-            heme = new MultiscaleSimulationMaster<MockIntercommunicator>(options,
+            heme = new MultiscaleSimulationController<MockIntercommunicator>(options,
                                                                          Comms(),
                                                                          intercomms);
-            // Mock out the behaviour of the simulation master iteration, but with the other model linked in.
+            // Mock out the behaviour of the simulation iteration, but with the other model linked in.
             while (heme->GetState().GetTime() < 20.0 || zerod->GetTime() < 20.0)
             {
                 heme->DoTimeStep();
@@ -214,8 +214,8 @@ namespace hemelb::tests
             }
             // In advancing 100 time steps, at 0.2 s per time step, with a 0d model at 0.5s per time step
             // the 0d model with execute 100*2/5=40 times, plus one more step, the one where it communicates the previous step.
-            // Each time, the pressure difference will drop by 0.1*0.1=0.01 mmHg.
-            // So the final pressure will be 81.0-41*0.01=80.59 mmHg
+            // Each time, the pressure difference will drop by 0.1*0.1=0.01 Pa.
+            // So the final pressure will be 81.0-41*0.01=80.59 Pa
             REQUIRE(Approx(0.59) == zerod->GetOutletPressure());
             heme->Finalise();
             REQUIRE(heme->GetState().GetTime() == Approx(20.0));

@@ -38,12 +38,12 @@ class BlockWriter {
   }
 
  protected:
-  char* buffer;
+  std::byte* buffer;
   hemelb::io::XdrMemWriter* writer;
   BufferPool* bufferPool;
-  unsigned int nFluidSites;
-  unsigned int CompressedBlockLength;
-  unsigned int UncompressedBlockLength;
+  unsigned nFluidSites;
+  unsigned CompressedBlockLength;
+  unsigned UncompressedBlockLength;
   bool IsFinished;
 };
 

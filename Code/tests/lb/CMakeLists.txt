@@ -12,6 +12,6 @@ add_test_lib(test_lb
   StreamerTests.cc
   VirtualSiteIoletStreamerTests.cc
   GuoForcingTests.cc
-  )
-add_subdirectory(iolets)
-target_link_libraries(test_lb PRIVATE test_iolets)
+  BoundaryTests.cc
+  InOutLetTests.cc
+)

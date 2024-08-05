@@ -106,7 +106,7 @@ namespace hemelb
       std::vector<std::shared_ptr<Cell> > cells;
       {
 	auto cell = std::make_shared<Cell>(icoSphere());
-	*cell -= cell->GetBarycenter();
+	*cell -= cell->GetBarycentre();
 	cells.push_back(std::make_shared<Cell>(*cell));
 	buffer->insert(cells.back());
 	*cell += cylinder.normal * 2.0;
@@ -138,7 +138,7 @@ namespace hemelb
 	// We know the cells are in cells are sorted
 	auto get_pos = [](CellContainer::value_type a)
 	  {
-	    return a->GetBarycenter();
+	    return a->GetBarycentre();
 	  };
 	std::vector<LatticePosition> positions(cells.size());
 	std::transform(cells.begin(), cells.end(), positions.begin(), get_pos);
@@ -155,7 +155,7 @@ namespace hemelb
 	  auto expected_pos = positions[i] + cylinder.normal * buffer->GetOffset()
 	    + cylinder.origin;
 	  REQUIRE(cell == cells[i]);
-	  REQUIRE(cell->GetBarycenter() == ApproxV(expected_pos));
+	  REQUIRE(cell->GetBarycentre() == ApproxV(expected_pos));
 	  REQUIRE(buffer->GetJustDropped() == cell);
 	}
 
@@ -180,8 +180,8 @@ namespace hemelb
 	buffer->updateOffset();
 	// updating should set offet such that dropping the cell will place it at the origin
 	auto const cell = buffer->drop();
-	auto const barycenter = cell->GetBarycenter();
-	REQUIRE(ApproxV(cylinder.origin) == barycenter);
+	auto const barycentre = cell->GetBarycentre();
+	REQUIRE(ApproxV(cylinder.origin) == barycentre);
       }
 
       // Moving perpendicular to the normal should have no effect
@@ -231,7 +231,7 @@ namespace hemelb
 	*cell -= cylinder.normal * 2.0;
 	buffer->updateOffset();
 	auto const nextDrop = buffer->drop();
-	REQUIRE(approx(cylinder.origin.x()) == nextDrop->GetBarycenter().x());
+	REQUIRE(approx(cylinder.origin.x()) == nextDrop->GetBarycentre().x());
       }
 
       SECTION("testOutsideInteractionRange") {
@@ -239,9 +239,9 @@ namespace hemelb
 	buffer->SetInteraction(1e0);
 
 	// Arrange cell positions first
-	* (cells[0]) += cylinder.normal * 0.0 - cells[0]->GetBarycenter();
-	* (cells[1]) += cylinder.normal * 5.0 - cells[1]->GetBarycenter();
-	* (cells[2]) += cylinder.normal * 10.0 - cells[2]->GetBarycenter();
+	* (cells[0]) += cylinder.normal * 0.0 - cells[0]->GetBarycentre();
+	* (cells[1]) += cylinder.normal * 5.0 - cells[1]->GetBarycentre();
+	* (cells[2]) += cylinder.normal * 10.0 - cells[2]->GetBarycentre();
 
 	buffer->updateOffset();
 	auto cell = buffer->drop();
@@ -270,7 +270,7 @@ namespace hemelb
 
       SECTION("testIsDroppable") {
 	auto cell = buffer->nearestCell();
-	*cell -= cell->GetBarycenter();
+	*cell -= cell->GetBarycentre();
 	// Center of cylinder should pass
 	*cell += cylinder.normal * cylinder.length * 0.5;
 	buffer->SetOffset(0);

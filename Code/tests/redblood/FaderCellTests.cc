@@ -68,7 +68,7 @@ namespace hemelb
         std::vector<LatticeForceVector> forces(2, zero);
         // No fading here
 	auto approx = Approx(0.0).margin(1e-8);
-        *fadingCell += LatticePosition(5, 1, 1) - fadingCell->GetBarycenter();
+        *fadingCell += LatticePosition(5, 1, 1) - fadingCell->GetBarycentre();
         REQUIRE(approx(1e0) == fadingCell->Energy(forces));
         REQUIRE(approx(0e0) == forces.front().x());
         REQUIRE(approx(1e0) == forces.front().y());
@@ -80,7 +80,7 @@ namespace hemelb
         // Now fades to 0.7
         forces = std::vector<LatticeForceVector>(2, zero);
         *fadingCell += LatticePosition(3.0 - inlet.fadeLength * 0.3, 1, 1)
-            - fadingCell->GetBarycenter();
+            - fadingCell->GetBarycentre();
         REQUIRE(approx(0.7 * 1e0) == fadingCell->Energy(forces));
         REQUIRE(approx(0.7 * 0e0) == forces.front().x());
         REQUIRE(approx(0.7 * 1e0) == forces.front().y());
@@ -92,7 +92,7 @@ namespace hemelb
         // fades to 0.7 in outlet
         forces = std::vector<LatticeForceVector>(2, zero);
         *fadingCell += LatticePosition(8.0 + inlet.fadeLength * 0.3, 1, 1)
-            - fadingCell->GetBarycenter();
+            - fadingCell->GetBarycentre();
         REQUIRE(approx(0.7 * 1e0) == fadingCell->Energy(forces));
         REQUIRE(approx(0.7 * 0e0) == forces.front().x());
         REQUIRE(approx(0.7 * 1e0) == forces.front().y());
